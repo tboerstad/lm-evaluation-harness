@@ -47,6 +47,14 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast, overload
 
 eval_logger = logging.getLogger(__name__)
 
+# evaluate is optional - only needed for HF metrics
+try:
+    import evaluate as hf_evaluate
+    HAS_HF_EVALUATE = True
+except ImportError:
+    HAS_HF_EVALUATE = False
+    hf_evaluate = None
+
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -627,6 +635,13 @@ def get_metric(name: str, hf_evaluate_metric: bool = False) -> Callable | None:
             eval_logger.warning(
                 f"Could not find registered metric '{name}' in lm-eval, searching in HF Evaluate library..."
             )
+
+    if not HAS_HF_EVALUATE:
+        eval_logger.error(
+            f"Metric '{name}' not found in lm-eval registry and 'evaluate' library is not installed. "
+            "Install it with: pip install evaluate"
+        )
+        return None
 
     try:
         import evaluate as hf_evaluate

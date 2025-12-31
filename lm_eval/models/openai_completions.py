@@ -248,7 +248,7 @@ class OpenAICompletionsAPI(LocalCompletionsAPI):
     def __init__(
         self,
         base_url="https://api.openai.com/v1/completions",
-        tokenizer_backend="tiktoken",
+        tokenizer_backend=None,
         **kwargs,
     ):
         super().__init__(

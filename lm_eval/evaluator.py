@@ -199,9 +199,7 @@ def simple_evaluate(
         seed_message.append(f"Setting numpy seed to {numpy_random_seed}")
         np.random.seed(numpy_random_seed)
 
-    if torch_random_seed is not None:
-        seed_message.append(f"Setting torch manual seed to {torch_random_seed}")
-        set_torch_seed(torch_random_seed)
+    # torch_random_seed is ignored (torch not used in API-only mode)
 
     if fewshot_random_seed is not None:
         seed_message.append(f"Setting fewshot manual seed to {fewshot_random_seed}")
@@ -559,24 +557,6 @@ def evaluate(
             reqtype = instance.request_type
             requests[reqtype].append(instance)
 
-        if lm.world_size > 1:
-            import torch
-
-            instances_rnk = torch.tensor(len(task._instances), device=lm.device)
-            gathered_item = (
-                lm.accelerator.gather(instances_rnk).cpu().detach().numpy().tolist()
-            )
-            # "multiple_choice" task types dispatch (several) "loglikelihood" request types
-            reqtype = (
-                "loglikelihood"
-                if task.OUTPUT_TYPE == "multiple_choice"
-                else task.OUTPUT_TYPE
-            )
-            # compute number of pseudo-batches to pad with (FSDP/DDP require even batches among ranks)
-            numpad = max(gathered_item) - gathered_item[lm.rank]
-            # todo: may not account for padding in cases like SquadV2 which has multiple req types
-            padding_requests[reqtype] += numpad
-
     ### Run LM on inputs, get all outputs ###
     # execute each type of request
     for reqtype, reqs in requests.items():
@@ -586,10 +566,6 @@ def evaluate(
         for req in reqs:
             cloned_reqs.extend([req] * req.repeats)
 
-        if (lm.world_size > 1) and (padding_requests[reqtype] > 0):
-            for _ in range(padding_requests[reqtype]):
-                cloned_reqs.extend([req] * req.repeats)
-
         # run requests through model
         resps = getattr(lm, reqtype)(cloned_reqs)
 
@@ -597,11 +573,8 @@ def evaluate(
         for x, req in zip(resps, cloned_reqs, strict=True):
             req.resps.append(x)
 
-        if lm.world_size > 1:
-            lm.accelerator.wait_for_everyone()
-
-    RANK = lm.rank
-    WORLD_SIZE = lm.world_size
+    RANK = 0
+    WORLD_SIZE = 1
     ### Postprocess outputs ###
     # TODO: del model here, maybe (idea: allow user to specify device of e.g. reward model separately)
     for task_output, limit in zip(eval_tasks, limits, strict=True):
@@ -666,40 +639,8 @@ def evaluate(
                 for metric, value in metrics.items():
                     task_output.sample_metrics[(metric, filter_key)].append(value)
 
-    if WORLD_SIZE > 1:
-        import torch
-
-        # if multigpu, then gather data across all ranks to rank 0
-        # first gather logged samples across all ranks
-        for task_output in eval_tasks:
-            if log_samples:
-                # for task_name, task_samples in list(samples.items()):
-                full_samples = [None] * WORLD_SIZE if RANK == 0 else None
-                torch.distributed.gather_object(
-                    obj=task_output.logged_samples,
-                    object_gather_list=full_samples,
-                    dst=0,
-                )
-
-                if RANK == 0:
-                    task_output.logged_samples = list(
-                        itertools.chain.from_iterable(full_samples)
-                    )
-
-            # then collect metrics across all ranks
-            for metrics in task_output.sample_metrics:
-                metric_list = [None] * WORLD_SIZE if RANK == 0 else None
-                torch.distributed.gather_object(
-                    obj=task_output.sample_metrics[metrics],
-                    object_gather_list=metric_list,
-                    dst=0,
-                )
-                if RANK == 0:
-                    task_output.sample_metrics[metrics] = list(
-                        itertools.chain.from_iterable(metric_list)
-                    )
-
-    if RANK == 0:
+    # Single process execution (API-only mode)
+    if True:
         ### Aggregate results over all datapoints ###
         # aggregate results ; run bootstrap CIs
         for task_output in eval_tasks:
