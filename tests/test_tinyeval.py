@@ -5,6 +5,7 @@ import base64
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from PIL import Image
 
 from core import (
     APIConfig,
@@ -44,8 +45,6 @@ class TestImageHandling:
 
     def test_encode_pil_image_and_string_passthrough(self):
         """PIL images encode to base64; local strings pass through; URLs rejected."""
-        from PIL import Image
-
         img = Image.new("RGB", (10, 10), color="red")
         b64 = _encode_image(img)
         assert base64.b64decode(b64)  # Valid base64
