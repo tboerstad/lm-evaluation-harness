@@ -54,7 +54,9 @@ async def eval_chartqa(config: APIConfig, limit: int | None = None) -> dict:
     # Load
     for split in ["test", "validation", "train"]:
         try:
-            ds = datasets.load_dataset("HuggingFaceM4/ChartQA", split=split, streaming=True)
+            ds = datasets.load_dataset(
+                "HuggingFaceM4/ChartQA", split=split, streaming=True
+            )
             docs = list(ds.take(limit) if limit else ds)
             break
         except ValueError:
@@ -63,8 +65,12 @@ async def eval_chartqa(config: APIConfig, limit: int | None = None) -> dict:
         raise ValueError("No valid split found in HuggingFaceM4/ChartQA")
 
     # Format prompts with images
-    prompts: list[tuple[str, list]] = [(_format_chartqa_prompt(d["query"]), [d["image"]]) for d in docs]
-    targets = [d["label"][0] if isinstance(d["label"], list) else str(d["label"]) for d in docs]
+    prompts: list[tuple[str, list]] = [
+        (_format_chartqa_prompt(d["query"]), [d["image"]]) for d in docs
+    ]
+    targets = [
+        d["label"][0] if isinstance(d["label"], list) else str(d["label"]) for d in docs
+    ]
 
     # Run inference
     print(f"Evaluating: chartqa ({len(docs)} samples, multimodal)")
@@ -76,7 +82,10 @@ async def eval_chartqa(config: APIConfig, limit: int | None = None) -> dict:
     correct = sum(_relaxed_match(r, t) for r, t in zip(responses, targets))
 
     metrics = {
-        "exact_match": sum(_normalize(r) == _normalize(t) for r, t in zip(responses, targets)) / len(docs),
+        "exact_match": sum(
+            _normalize(r) == _normalize(t) for r, t in zip(responses, targets)
+        )
+        / len(docs),
         "relaxed_accuracy": correct / len(docs),
     }
     print(f"chartqa: {metrics} ({elapsed:.2f}s)")

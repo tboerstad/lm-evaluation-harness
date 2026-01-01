@@ -5,6 +5,7 @@ tinyeval - Minimal LLM evaluation harness.
 Two tasks: gsm8k_llama (text) and chartqa (multimodal).
 One abstraction: batch HTTP requests to an OpenAI-compatible API.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -43,7 +44,11 @@ async def _request(
             async with semaphore, session.post(url, json=payload) as resp:
                 if resp.ok:
                     data = await resp.json()
-                    return data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    return (
+                        data.get("choices", [{}])[0]
+                        .get("message", {})
+                        .get("content", "")
+                    )
                 print(f"Request failed (attempt {attempt + 1}): {await resp.text()}")
         except Exception as e:
             print(f"Request error (attempt {attempt + 1}): {e}")
@@ -106,7 +111,9 @@ async def complete(
             if stop:
                 payload["stop"] = stop[:4]
 
-            tasks.append(_request(session, config.url, payload, semaphore, config.max_retries))
+            tasks.append(
+                _request(session, config.url, payload, semaphore, config.max_retries)
+            )
 
         return list(await asyncio.gather(*tasks))
 
@@ -116,7 +123,12 @@ def _build_vision_message(text: str, images: list) -> list[dict]:
     content: list[dict[str, Any]] = []
     for img in images:
         if b64 := _encode_image(img):
-            content.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}})
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{b64}"},
+                }
+            )
     content.append({"type": "text", "text": text.replace("<image>", "").strip()})
     return [{"role": "user", "content": content}]
 
@@ -143,19 +155,25 @@ def _normalize(text: str) -> str:
     return text.lower().strip()
 
 
-# Import tasks after defining shared utilities to avoid circular imports
-from tasks import TASKS  # noqa: E402
+def get_tasks() -> dict:
+    """Get task registry. Lazy import to avoid circular dependencies."""
+    from tasks import TASKS
+
+    return TASKS
 
 
-async def evaluate(task_names: list[str], config: APIConfig, limit: int | None = None) -> dict:
+async def evaluate(
+    task_names: list[str], config: APIConfig, limit: int | None = None
+) -> dict:
     """Run evaluations for specified tasks."""
+    tasks = get_tasks()
     results = {}
     total_time = 0.0
 
     for name in task_names:
-        if name not in TASKS:
-            raise ValueError(f"Unknown task: {name}. Available: {list(TASKS.keys())}")
-        result = await TASKS[name](config, limit)
+        if name not in tasks:
+            raise ValueError(f"Unknown task: {name}. Available: {list(tasks.keys())}")
+        result = await tasks[name](config, limit)
         results[name] = result
         total_time += result["time_seconds"]
 
@@ -167,13 +185,18 @@ def main() -> int:
     import argparse
     import json
 
+    tasks = get_tasks()
     parser = argparse.ArgumentParser(description="tinyeval - Minimal LLM evaluation")
-    parser.add_argument("--tasks", required=True, help=f"Comma-separated: {', '.join(TASKS.keys())}")
+    parser.add_argument(
+        "--tasks", required=True, help=f"Comma-separated: {', '.join(tasks.keys())}"
+    )
     parser.add_argument("--model", required=True, help="Model name")
     parser.add_argument("--base_url", required=True, help="API base URL")
     parser.add_argument("--api_key", default="", help="API key")
     parser.add_argument("--limit", type=int, help="Limit samples per task")
-    parser.add_argument("--num_concurrent", type=int, default=8, help="Concurrent requests")
+    parser.add_argument(
+        "--num_concurrent", type=int, default=8, help="Concurrent requests"
+    )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--output", help="Output JSON file")
     args = parser.parse_args()
