@@ -175,15 +175,6 @@ class Instance:
 
 
 @dataclass
-class EvalResult:
-    """Evaluation results."""
-
-    task: str
-    metrics: dict[str, float]
-    num_samples: int
-
-
-@dataclass
 class APIConfig:
     """OpenAI-compatible API configuration."""
 
@@ -293,11 +284,6 @@ def create_chat_payload(
     return payload
 
 
-def create_text_message(text: str) -> list[dict[str, Any]]:
-    """Create text-only user message."""
-    return [{"role": "user", "content": text}]
-
-
 async def make_request(
     session: aiohttp.ClientSession,
     url: str,
@@ -318,13 +304,6 @@ async def make_request(
         if attempt < max_retries - 1:
             await asyncio.sleep(2**attempt)
     return None
-
-
-def parse_chat_response(response: dict[str, Any] | None) -> str:
-    """Extract content from chat completion response."""
-    if not response or not (choices := response.get("choices")):
-        return ""
-    return choices[0].get("message", {}).get("content", "")
 
 
 async def run_generation(
@@ -351,13 +330,13 @@ async def run_generation(
             if task_config.is_multimodal and inst.images:
                 messages = build_multimodal_message(inst.prompt, inst.images)
             else:
-                messages = create_text_message(inst.prompt)
+                messages = [{"role": "user", "content": inst.prompt}]
             payload = create_chat_payload(messages, api_config, task_config)
             tasks.append(
                 make_request(session, api_config.base_url, payload, headers, semaphore, api_config.max_retries)
             )
-        for inst, response in zip(instances, await asyncio.gather(*tasks)):
-            inst.response = parse_chat_response(response)
+        for inst, resp in zip(instances, await asyncio.gather(*tasks)):
+            inst.response = resp["choices"][0]["message"]["content"] if resp and resp.get("choices") else ""
 
     return instances
 
@@ -464,8 +443,8 @@ async def evaluate_task(
     task_name: str,
     api_config: APIConfig,
     limit: int | None = None,
-) -> tuple[EvalResult, float]:
-    """Evaluate a single task."""
+) -> tuple[dict[str, Any], float]:
+    """Evaluate a single task. Returns (result_dict, eval_time)."""
     if task_name not in TASKS:
         raise ValueError(f"Unknown task: {task_name}. Available: {list(TASKS.keys())}")
 
@@ -481,22 +460,22 @@ async def evaluate_task(
     eval_time = time.perf_counter() - start_time
 
     metrics = compute_metrics(instances, config)
-    return EvalResult(task=config.task, metrics=metrics, num_samples=len(instances)), eval_time
+    return {"task": config.task, "metrics": metrics, "num_samples": len(instances)}, eval_time
 
 
 async def evaluate_tasks(
     task_names: list[str],
     api_config: APIConfig,
     limit: int | None = None,
-) -> tuple[dict[str, tuple[EvalResult, float]], float]:
+) -> tuple[dict[str, tuple[dict[str, Any], float]], float]:
     """Evaluate multiple tasks sequentially."""
     results = {}
     total_time = 0.0
     for name in task_names:
         result, eval_time = await evaluate_task(name, api_config, limit)
-        results[result.task] = (result, eval_time)
+        results[result["task"]] = (result, eval_time)
         total_time += eval_time
-        print(f"{result.task}: {result.metrics} ({eval_time:.2f}s)")
+        print(f"{result['task']}: {result['metrics']} ({eval_time:.2f}s)")
     return results, total_time
 
 
@@ -540,7 +519,7 @@ def main() -> int:
 
     output = {
         "results": {
-            name: {"metrics": r.metrics, "num_samples": r.num_samples, "time_seconds": round(t, 2)}
+            name: {"metrics": r["metrics"], "num_samples": r["num_samples"], "time_seconds": round(t, 2)}
             for name, (r, t) in results.items()
         },
         "config": {"model": args.model, "limit": args.limit},
