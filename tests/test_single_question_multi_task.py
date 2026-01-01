@@ -1,7 +1,7 @@
 """Test running a single question from multiple tasks.
 
 This test verifies that the evaluation pipeline correctly:
-1. Loads task configurations for gsm8k, arc_easy, and hellaswag
+1. Loads task configurations for triviaqa, openbookqa, and piqa
 2. Builds instances from a single question per task
 3. Runs generation with mocked API responses
 4. Computes metrics for each task
@@ -41,49 +41,53 @@ class MockContextManager:
 
 
 class TestSingleQuestionMultiTask:
-    """Test running a single question from gsm8k, arc_easy, and hellaswag."""
+    """Test running a single question from triviaqa, openbookqa, and piqa."""
 
     @pytest.fixture
-    def gsm8k_config(self):
-        """Load gsm8k task config."""
+    def triviaqa_config(self):
+        """Load triviaqa task config."""
         from tinyeval import TaskConfig
 
-        return TaskConfig.from_yaml(TASKS_DIR / "gsm8k" / "gsm8k.yaml")
+        return TaskConfig.from_yaml(TASKS_DIR / "triviaqa" / "default.yaml")
 
     @pytest.fixture
-    def arc_easy_config(self):
-        """Load arc_easy task config."""
+    def openbookqa_config(self):
+        """Load openbookqa task config."""
         from tinyeval import TaskConfig
 
-        return TaskConfig.from_yaml(TASKS_DIR / "arc" / "arc_easy.yaml")
+        return TaskConfig.from_yaml(TASKS_DIR / "openbookqa" / "openbookqa.yaml")
 
     @pytest.fixture
-    def hellaswag_config(self):
-        """Load hellaswag task config."""
+    def piqa_config(self):
+        """Load piqa task config."""
         from tinyeval import TaskConfig
 
-        return TaskConfig.from_yaml(TASKS_DIR / "hellaswag" / "hellaswag.yaml")
+        return TaskConfig.from_yaml(TASKS_DIR / "piqa" / "piqa.yaml")
 
-    def test_gsm8k_single_question(self, gsm8k_config):
-        """Test running a single GSM8K math question."""
+    def test_triviaqa_single_question(self, triviaqa_config):
+        """Test running a single TriviaQA trivia question."""
         from tinyeval import APIConfig, build_instances, compute_metrics, run_generation
 
-        # Create a mock GSM8K document
+        # Create a mock TriviaQA document
         doc = {
-            "question": "Janet's ducks lay 16 eggs per day. She eats 3 for breakfast and uses 4 to bake muffins. How many does she have left?",
-            "answer": "Janet has 16 - 3 - 4 = <<16-3-4=9>>9 eggs left. #### 9",
+            "question": "What is the capital of France",
+            "answer": {
+                "aliases": ["Paris", "paris", "PARIS"],
+                "normalized_aliases": ["paris"],
+                "value": "Paris",
+            },
         }
 
-        instances = build_instances(gsm8k_config, [doc])
+        instances = build_instances(triviaqa_config, [doc])
         assert len(instances) == 1
-        assert "Janet's ducks" in instances[0].prompt
+        assert "capital of France" in instances[0].prompt
         assert instances[0].target is not None
 
-        # Mock API response with correct answer format
+        # Mock API response with correct answer
         api_config = APIConfig(
             base_url="http://mock/v1/chat/completions", model="mock", api_key="test"
         )
-        mock_response = MockResponse("Let me solve this step by step.\n16 - 3 - 4 = 9\n#### 9")
+        mock_response = MockResponse("Paris")
 
         with patch("tinyeval.aiohttp.ClientSession") as mock_session:
             mock_session.return_value.__aenter__.return_value = AsyncMock(
@@ -92,31 +96,34 @@ class TestSingleQuestionMultiTask:
             instances = asyncio.run(run_generation(instances, api_config))
 
         assert instances[0].response is not None
-        assert "9" in instances[0].response
+        assert "Paris" in instances[0].response
 
-        metrics = compute_metrics(instances, gsm8k_config)
+        metrics = compute_metrics(instances, triviaqa_config)
         assert "exact_match" in metrics
 
-    def test_arc_easy_single_question(self, arc_easy_config):
-        """Test running a single ARC-Easy question."""
+    def test_openbookqa_single_question(self, openbookqa_config):
+        """Test running a single OpenBookQA science question."""
         from tinyeval import APIConfig, build_instances, compute_metrics, run_generation
 
-        # Create a mock ARC-Easy document
+        # Create a mock OpenBookQA document
         doc = {
-            "question": "Which of these is a nonrenewable resource?",
-            "choices": {"text": ["Coal", "Trees", "Water", "Sunlight"], "label": ["A", "B", "C", "D"]},
-            "answerKey": "A",
+            "question_stem": "Which of the following is a renewable energy source?",
+            "choices": {
+                "text": ["Coal", "Natural gas", "Solar power", "Nuclear power"],
+                "label": ["A", "B", "C", "D"],
+            },
+            "answerKey": "C",
         }
 
-        instances = build_instances(arc_easy_config, [doc])
+        instances = build_instances(openbookqa_config, [doc])
         assert len(instances) == 1
-        assert "nonrenewable" in instances[0].prompt
+        assert "renewable" in instances[0].prompt
 
         # Mock API response
         api_config = APIConfig(
             base_url="http://mock/v1/chat/completions", model="mock", api_key="test"
         )
-        mock_response = MockResponse("A")
+        mock_response = MockResponse("C")
 
         with patch("tinyeval.aiohttp.ClientSession") as mock_session:
             mock_session.return_value.__aenter__.return_value = AsyncMock(
@@ -125,35 +132,30 @@ class TestSingleQuestionMultiTask:
             instances = asyncio.run(run_generation(instances, api_config))
 
         assert instances[0].response is not None
-        metrics = compute_metrics(instances, arc_easy_config)
-        # ARC uses acc metric but we compute exact_match by default
+        metrics = compute_metrics(instances, openbookqa_config)
         assert len(metrics) > 0
 
-    def test_hellaswag_single_question(self, hellaswag_config):
-        """Test running a single HellaSwag question."""
+    def test_piqa_single_question(self, piqa_config):
+        """Test running a single PIQA physical intuition question."""
         from tinyeval import APIConfig, build_instances, compute_metrics, run_generation
 
-        # Create a mock HellaSwag document (processed format)
+        # Create a mock PIQA document
         doc = {
-            "query": "A woman is outside with a bucket and a dog. The dog is running around trying to catch water from the bucket. The woman",
-            "choices": [
-                "rinses the bucket and puts it down.",
-                "splashes water on the dog.",
-                "picks up the dog.",
-                "throws the bucket at the dog.",
-            ],
-            "label": "1",  # Second choice is correct
+            "goal": "How do you make ice cubes?",
+            "sol1": "Put water in a freezer",
+            "sol2": "Put water in an oven",
+            "label": 0,  # First solution is correct
         }
 
-        instances = build_instances(hellaswag_config, [doc])
+        instances = build_instances(piqa_config, [doc])
         assert len(instances) == 1
-        assert "bucket" in instances[0].prompt
+        assert "ice cubes" in instances[0].prompt
 
         # Mock API response
         api_config = APIConfig(
             base_url="http://mock/v1/chat/completions", model="mock", api_key="test"
         )
-        mock_response = MockResponse("1")
+        mock_response = MockResponse("0")
 
         with patch("tinyeval.aiohttp.ClientSession") as mock_session:
             mock_session.return_value.__aenter__.return_value = AsyncMock(
@@ -162,35 +164,43 @@ class TestSingleQuestionMultiTask:
             instances = asyncio.run(run_generation(instances, api_config))
 
         assert instances[0].response is not None
-        metrics = compute_metrics(instances, hellaswag_config)
+        metrics = compute_metrics(instances, piqa_config)
         assert len(metrics) > 0
 
-    def test_all_three_tasks_together(self, gsm8k_config, arc_easy_config, hellaswag_config):
+    def test_all_three_tasks_together(self, triviaqa_config, openbookqa_config, piqa_config):
         """Test running all three tasks together in a single pipeline."""
         from tinyeval import APIConfig, build_instances, compute_metrics, run_generation
 
         # Create mock documents for each task
-        gsm8k_doc = {
-            "question": "If there are 3 apples and you take 2, how many do you have?",
-            "answer": "You have 2 apples because you took them. #### 2",
+        triviaqa_doc = {
+            "question": "Who wrote Romeo and Juliet",
+            "answer": {
+                "aliases": ["Shakespeare", "William Shakespeare"],
+                "normalized_aliases": ["shakespeare", "william shakespeare"],
+                "value": "William Shakespeare",
+            },
         }
-        arc_doc = {
-            "question": "What is the chemical formula for water?",
-            "choices": {"text": ["H2O", "CO2", "O2", "N2"], "label": ["A", "B", "C", "D"]},
-            "answerKey": "A",
+        openbookqa_doc = {
+            "question_stem": "What do plants need to perform photosynthesis?",
+            "choices": {
+                "text": ["Darkness", "Sunlight", "Cold", "Wind"],
+                "label": ["A", "B", "C", "D"],
+            },
+            "answerKey": "B",
         }
-        hellaswag_doc = {
-            "query": "A chef is in the kitchen preparing a meal. The chef",
-            "choices": ["burns the food.", "adds salt.", "leaves.", "dances."],
-            "label": "1",
+        piqa_doc = {
+            "goal": "How do you cut paper?",
+            "sol1": "Use scissors",
+            "sol2": "Use a pillow",
+            "label": 0,
         }
 
         # Build instances for each task
-        gsm8k_instances = build_instances(gsm8k_config, [gsm8k_doc])
-        arc_instances = build_instances(arc_easy_config, [arc_doc])
-        hellaswag_instances = build_instances(hellaswag_config, [hellaswag_doc])
+        triviaqa_instances = build_instances(triviaqa_config, [triviaqa_doc])
+        openbookqa_instances = build_instances(openbookqa_config, [openbookqa_doc])
+        piqa_instances = build_instances(piqa_config, [piqa_doc])
 
-        all_instances = gsm8k_instances + arc_instances + hellaswag_instances
+        all_instances = triviaqa_instances + openbookqa_instances + piqa_instances
         assert len(all_instances) == 3
 
         # Mock API response
@@ -198,7 +208,7 @@ class TestSingleQuestionMultiTask:
             base_url="http://mock/v1/chat/completions", model="mock", api_key="test"
         )
 
-        responses = ["#### 2", "A", "1"]
+        responses = ["Shakespeare", "B", "0"]
         response_idx = [0]
 
         def make_response(*args, **kwargs):
@@ -214,19 +224,19 @@ class TestSingleQuestionMultiTask:
         assert all(inst.response is not None for inst in all_instances)
 
         # Compute metrics for each task separately
-        gsm8k_metrics = compute_metrics([all_instances[0]], gsm8k_config)
-        arc_metrics = compute_metrics([all_instances[1]], arc_easy_config)
-        hellaswag_metrics = compute_metrics([all_instances[2]], hellaswag_config)
+        triviaqa_metrics = compute_metrics([all_instances[0]], triviaqa_config)
+        openbookqa_metrics = compute_metrics([all_instances[1]], openbookqa_config)
+        piqa_metrics = compute_metrics([all_instances[2]], piqa_config)
 
         # All tasks should have computed at least one metric
-        assert len(gsm8k_metrics) > 0, "GSM8K should have metrics"
-        assert len(arc_metrics) > 0, "ARC-Easy should have metrics"
-        assert len(hellaswag_metrics) > 0, "HellaSwag should have metrics"
+        assert len(triviaqa_metrics) > 0, "TriviaQA should have metrics"
+        assert len(openbookqa_metrics) > 0, "OpenBookQA should have metrics"
+        assert len(piqa_metrics) > 0, "PIQA should have metrics"
 
         # Report metrics
-        print(f"\nGSM8K metrics: {gsm8k_metrics}")
-        print(f"ARC-Easy metrics: {arc_metrics}")
-        print(f"HellaSwag metrics: {hellaswag_metrics}")
+        print(f"\nTriviaQA metrics: {triviaqa_metrics}")
+        print(f"OpenBookQA metrics: {openbookqa_metrics}")
+        print(f"PIQA metrics: {piqa_metrics}")
 
 
 class TestTaskConfigLoading:
@@ -235,9 +245,9 @@ class TestTaskConfigLoading:
     @pytest.mark.parametrize(
         "task_path",
         [
-            TASKS_DIR / "gsm8k" / "gsm8k.yaml",
-            TASKS_DIR / "arc" / "arc_easy.yaml",
-            TASKS_DIR / "hellaswag" / "hellaswag.yaml",
+            TASKS_DIR / "triviaqa" / "default.yaml",
+            TASKS_DIR / "openbookqa" / "openbookqa.yaml",
+            TASKS_DIR / "piqa" / "piqa.yaml",
         ],
     )
     def test_config_loads_successfully(self, task_path):
