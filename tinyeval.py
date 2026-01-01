@@ -4,7 +4,11 @@ tinyeval - Tiny Eval
 
 A minimal, typed evaluation harness for LLMs via OpenAI-compatible APIs.
 
-Supports two built-in tasks:
+Example tasks (for quick testing):
+- text: Text-only task (backed by gsm8k_llama)
+- image: Multimodal task (backed by chartqa)
+
+Full tasks:
 - gsm8k_llama: Text-based grade school math (chain-of-thought)
 - chartqa: Multimodal chart question answering
 """
@@ -139,26 +143,34 @@ class TaskConfig:
 
 
 # Built-in task configs
+_gsm8k_llama = TaskConfig(
+    task="gsm8k_llama",
+    dataset_path="gsm8k",
+    dataset_name="main",
+    doc_to_text=gsm8k_doc_to_text,
+    doc_to_target=gsm8k_doc_to_target,
+    extract_answer=gsm8k_extract_answer,
+    fewshot_examples=GSM8K_FEWSHOT_EXAMPLES,
+    stop_sequences=["<|eot_id|>", "<|start_header_id|>user<|end_header_id|>", "Q:", "</s>", "<|im_end|>"],
+    max_tokens=512,
+)
+
+_chartqa = TaskConfig(
+    task="chartqa",
+    dataset_path="HuggingFaceM4/ChartQA",
+    doc_to_text=chartqa_doc_to_text,
+    doc_to_target=chartqa_doc_to_target,
+    doc_to_image=["image"],
+    max_tokens=512,
+)
+
 TASKS: dict[str, TaskConfig] = {
-    "gsm8k_llama": TaskConfig(
-        task="gsm8k_llama",
-        dataset_path="gsm8k",
-        dataset_name="main",
-        doc_to_text=gsm8k_doc_to_text,
-        doc_to_target=gsm8k_doc_to_target,
-        extract_answer=gsm8k_extract_answer,
-        fewshot_examples=GSM8K_FEWSHOT_EXAMPLES,
-        stop_sequences=["<|eot_id|>", "<|start_header_id|>user<|end_header_id|>", "Q:", "</s>", "<|im_end|>"],
-        max_tokens=512,
-    ),
-    "chartqa": TaskConfig(
-        task="chartqa",
-        dataset_path="HuggingFaceM4/ChartQA",
-        doc_to_text=chartqa_doc_to_text,
-        doc_to_target=chartqa_doc_to_target,
-        doc_to_image=["image"],
-        max_tokens=512,
-    ),
+    # Example tasks (simple names for quick testing)
+    "text": _gsm8k_llama,
+    "image": _chartqa,
+    # Full task names
+    "gsm8k_llama": _gsm8k_llama,
+    "chartqa": _chartqa,
 }
 
 

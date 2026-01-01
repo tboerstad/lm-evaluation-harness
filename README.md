@@ -87,6 +87,15 @@ print(f"Results: {metrics}")
 
 ## Supported Tasks
 
+### Example Tasks (for quick testing)
+
+| Task | Type | Description |
+|------|------|-------------|
+| `text` | Text | Example text task (backed by gsm8k_llama) |
+| `image` | Multimodal | Example image task (backed by chartqa) |
+
+### Full Tasks
+
 | Task | Type | Dataset | Description |
 |------|------|---------|-------------|
 | `gsm8k_llama` | Text | gsm8k | Grade school math with chain-of-thought (8-shot) |
