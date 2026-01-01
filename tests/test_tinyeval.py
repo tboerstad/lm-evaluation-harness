@@ -14,10 +14,10 @@ from core import (
     _normalize,
     complete,
 )
-from tinyeval import evaluate
 from tasks import TASKS
 from tasks.chartqa import _format_chartqa_prompt, _relaxed_match
 from tasks.gsm8k import _extract_gsm8k_answer, _format_gsm8k_prompt
+from tinyeval import evaluate
 
 
 def _make_mock_session(response_data: dict):
@@ -47,7 +47,7 @@ class TestImageHandling:
         """PIL images encode to base64; local strings pass through; URLs rejected."""
         img = Image.new("RGB", (10, 10), color="red")
         b64 = _encode_image(img)
-        assert base64.b64decode(b64)  # Valid base64
+        assert base64.b64decode(b64)
 
         # Local string paths pass through
         local_path = "/path/to/image.png"

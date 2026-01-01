@@ -97,12 +97,10 @@ async def eval_gsm8k(config: APIConfig, limit: int | None = None) -> dict:
 
     Returns dict with exact_match, num_samples, time_seconds.
     """
-    # Load
     ds = datasets.load_dataset("gsm8k", "main", split="test", streaming=True)
     docs = list(ds.take(limit) if limit else ds)
     targets = [_parse_target(d["answer"]) for d in docs]
 
-    # Run inference
     responses, elapsed = await run_task(
         "gsm8k_llama",
         config,
@@ -111,7 +109,6 @@ async def eval_gsm8k(config: APIConfig, limit: int | None = None) -> dict:
         stop=GSM8K_STOP,
     )
 
-    # Score
     correct = sum(
         _normalize(_extract_gsm8k_answer(r)) == _normalize(t)
         for r, t in zip(responses, targets)

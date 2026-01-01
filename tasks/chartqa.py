@@ -71,7 +71,6 @@ async def eval_chartqa(config: APIConfig, limit: int | None = None) -> dict:
         d["label"][0] if isinstance(d["label"], list) else str(d["label"]) for d in docs
     ]
 
-    # Run inference
     responses, elapsed = await run_task(
         "chartqa",
         config,
@@ -79,7 +78,6 @@ async def eval_chartqa(config: APIConfig, limit: int | None = None) -> dict:
         lambda d: (_format_chartqa_prompt(d["query"]), [d["image"]]),
     )
 
-    # Score
     correct = sum(_relaxed_match(r, t) for r, t in zip(responses, targets))
 
     metrics = {
