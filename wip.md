@@ -316,6 +316,53 @@ Simplified `lm_eval_mini.py` to ignore splits completely - loads all available d
    - Updated seed reproducibility tests for new function signature
    - Added `test_fewshot_exclude_indices` test
 
+### Phase 12: Add Dataclass Field Documentation
+
+Added single-line documentation for all dataclass fields in `lm_eval_mini.py`:
+
+1. **TaskConfig** - 15 fields documented:
+   - `task`: Unique identifier for the task
+   - `dataset_path`: HuggingFace dataset path or local directory
+   - `dataset_name`: Dataset configuration/subset name
+   - `num_fewshot`: Number of few-shot examples to prepend
+   - `output_type`: Generation mode (only "generate_until" supported)
+   - `doc_to_text`: Jinja2 template for input prompt
+   - `doc_to_target`: Template or field name for expected answer
+   - `doc_to_image`: Field(s) containing images for multimodal tasks
+   - `target_delimiter`: Separator between prompt and target in few-shot
+   - `fewshot_delimiter`: Separator between few-shot examples
+   - `generation_kwargs`: API generation params (temperature, max_tokens, until)
+   - `metric_list`: Metrics to compute
+   - `filter_list`: Post-processing filters for answer extraction
+   - `process_docs`: Optional preprocessing function
+   - `metadata`: Additional task metadata
+
+2. **Instance** - 7 fields documented:
+   - `doc`: Original document from the dataset
+   - `doc_id`: Index of the document in the dataset
+   - `prompt`: Rendered prompt text with few-shot context
+   - `target`: Expected answer(s) for evaluation
+   - `images`: PIL Images or base64 strings for multimodal
+   - `generation_kwargs`: Per-instance generation parameters
+   - `response`: Model-generated response (populated after API call)
+
+3. **EvalResult** - 4 fields documented:
+   - `task`: Name of the evaluated task
+   - `metrics`: Computed metric scores
+   - `num_samples`: Total evaluated samples
+   - `samples`: Optional per-sample details for debugging
+
+4. **APIConfig** - 9 fields documented:
+   - `base_url`: Full URL to chat completions endpoint
+   - `model`: Model name for API requests
+   - `api_key`: Bearer token for Authorization header
+   - `max_tokens`: Default max tokens per request
+   - `temperature`: Sampling temperature
+   - `seed`: Random seed for reproducibility
+   - `num_concurrent`: Max concurrent HTTP requests
+   - `timeout`: Request timeout in seconds
+   - `max_retries`: Retry attempts on failure
+
 ## Known Limitations
 - No local model inference (by design)
 - No multi-GPU support (by design)
