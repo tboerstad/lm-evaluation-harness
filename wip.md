@@ -86,6 +86,29 @@ Removed all optional dependencies and their related code:
    - Removed "Visualizing Results" section from `README.md`
    - Simplified Optional Extras section in `README.md`
 
+### Phase 7: Add CLI HTTP Request Tests
+Added comprehensive tests for CLI HTTP request handling (`tests/test_cli_http.py`):
+
+1. **Sync HTTP request tests:**
+   - Payload format validation (model, max_tokens, temperature)
+   - Stop sequences correctly passed in payload
+   - Multiple requests count verification
+   - URL and headers validation
+
+2. **Async HTTP request tests:**
+   - Batched request structure verification
+   - Request count matching input (N requests → N HTTP calls)
+   - TCPConnector concurrency limit (num_concurrent)
+
+3. **Task-style request tests:**
+   - GSM8K-style prompts with stop sequences (`["Question:", "</s>", "<|im_end|>"]`)
+   - ChartQA-style generation kwargs (max_gen_toks: 512)
+
+4. **Request payload validation:**
+   - Seed (default 1234) included in payload
+   - Custom model names passed correctly
+   - Batch size handling
+
 ## Current State
 
 ### Available Models
@@ -108,6 +131,7 @@ Removed all optional dependencies and their related code:
 - `lm_eval/_cli/run.py` - CLI (removed wandb args)
 - `lm_eval/config/evaluate_config.py` - Config (removed wandb fields)
 - `pyproject.toml` - Minimal dependencies (only dev/testing extras)
+- `tests/test_cli_http.py` - CLI HTTP request tests (12 tests)
 
 ### Lines of Code Removed
 - ~8,000 lines from model backends
@@ -125,6 +149,9 @@ print('Models:', list(MODEL_REGISTRY.keys()))
 
 # Test CLI
 python -m lm_eval --help
+
+# Run CLI HTTP tests (12 tests covering sync/async HTTP requests)
+python -m pytest tests/test_cli_http.py -v
 ```
 
 ## Rollback
