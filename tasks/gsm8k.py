@@ -70,6 +70,14 @@ def _format_gsm8k_prompt(question: str) -> str:
 _NUM_PATTERN = r"-?[$0-9.,]{2,}|-?[0-9]+"
 
 
+def _parse_target(answer: str) -> str:
+    """Parse target answer from GSM8K format, handling missing #### delimiter."""
+    parts = answer.split("####")
+    if len(parts) < 2:
+        return answer.strip()
+    return parts[-1].strip()
+
+
 def _extract_gsm8k_answer(response: str) -> str:
     """Extract numeric answer from GSM8K response."""
     if match := re.search(rf"The final answer is ({_NUM_PATTERN})", response):
@@ -91,7 +99,7 @@ async def eval_gsm8k(config: APIConfig, limit: int | None = None) -> dict:
 
     # Format prompts and extract targets
     prompts = [_format_gsm8k_prompt(d["question"]) for d in docs]
-    targets = [d["answer"].split("####")[-1].strip() for d in docs]
+    targets = [_parse_target(d["answer"]) for d in docs]
 
     # Run inference
     print(f"Evaluating: gsm8k_llama ({len(docs)} samples)")
