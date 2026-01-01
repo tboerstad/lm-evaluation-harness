@@ -2,7 +2,7 @@
 GSM8K evaluation - grade school math with chain-of-thought.
 
 Responsibilities:
-- Load gsm8k dataset
+- Load gsm8k dataset (test/train fallback)
 - Format 8-shot prompts with reasoning examples
 - Extract numeric answers from responses
 - Compute exact_match (normalized string comparison)
@@ -105,8 +105,15 @@ async def eval_gsm8k(config: APIConfig, limit: int | None = None) -> dict:
 
     Returns dict with exact_match, num_samples, time_seconds.
     """
-    ds = datasets.load_dataset("gsm8k", "main", split="test", streaming=True)
-    docs = list(ds.take(limit) if limit else ds)
+    for split in ["test", "train"]:
+        try:
+            ds = datasets.load_dataset("gsm8k", "main", split=split, streaming=True)
+            docs = list(ds.take(limit) if limit else ds)
+            break
+        except ValueError:
+            continue
+    else:
+        raise ValueError("No valid split found in gsm8k")
     targets = [_parse_target(d["answer"]) for d in docs]
 
     responses, elapsed = await run_task(
