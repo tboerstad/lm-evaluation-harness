@@ -19,11 +19,6 @@ import aiohttp
 import datasets
 
 
-# =============================================================================
-# HTTP Client - The only real abstraction: send prompts, get responses
-# =============================================================================
-
-
 @dataclass
 class APIConfig:
     """API configuration."""
@@ -142,10 +137,6 @@ def _encode_image(image: Any) -> str:
     return image if isinstance(image, str) else ""
 
 
-# =============================================================================
-# GSM8K Evaluation - Chain of thought math reasoning
-# =============================================================================
-
 GSM8K_FEWSHOT = [
     ("There are 15 trees in the grove. Grove workers will plant trees in the grove today. After they are done, there will be 21 trees. How many trees did the grove workers plant today?", "There are 15 trees originally. Then there were 21 trees after some more were planted. So there must have been 21 - 15 = 6. The final answer is 6"),
     ("If there are 3 cars in the parking lot and 2 more cars arrive, how many cars are in the parking lot?", "There are originally 3 cars. 2 more cars arrive. 3 + 2 = 5. The final answer is 5"),
@@ -223,11 +214,6 @@ async def eval_gsm8k(config: APIConfig, limit: int | None = None) -> dict:
     }
 
 
-# =============================================================================
-# ChartQA Evaluation - Multimodal chart understanding
-# =============================================================================
-
-
 def _format_chartqa_prompt(query: str) -> str:
     """Format ChartQA prompt."""
     return (
@@ -283,11 +269,6 @@ async def eval_chartqa(config: APIConfig, limit: int | None = None) -> dict:
     }
 
 
-# =============================================================================
-# Scoring
-# =============================================================================
-
-
 def _normalize(text: str) -> str:
     """Normalize text for comparison."""
     text = re.sub(r"[$,]", "", text)
@@ -319,10 +300,6 @@ def _relaxed_match(response: str, target: str) -> float:
 
     return 0.0
 
-
-# =============================================================================
-# CLI
-# =============================================================================
 
 TASKS = {"gsm8k_llama": eval_gsm8k, "chartqa": eval_chartqa}
 
