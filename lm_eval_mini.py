@@ -33,11 +33,6 @@ import yaml
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
-# ============================================================================
-# Types
-# ============================================================================
-
-
 @dataclass
 class TaskConfig:
     """YAML task configuration (dataset, prompts, metrics, generation settings).
@@ -106,10 +101,6 @@ class EvalResult:
     num_samples: int  # Total number of evaluated samples
 
 
-# ============================================================================
-# Template Engine
-# ============================================================================
-
 _jinja_env = jinja2.Environment(undefined=jinja2.StrictUndefined)
 
 
@@ -131,10 +122,6 @@ def resolve_field(doc: dict[str, Any], field_spec: str | list | int | None) -> A
     result = render_template(field_spec, doc)
     return int(result) if result.isdigit() else result
 
-
-# ============================================================================
-# Image Handling
-# ============================================================================
 
 def encode_image_to_base64(image: Any, fmt: str = "PNG") -> str:
     """Encode PIL Image to base64. Strings (URLs/base64) pass through unchanged."""
@@ -170,10 +157,6 @@ def build_multimodal_message(text: str, images: list[Any]) -> list[dict[str, Any
     content.append({"type": "text", "text": text.replace("<image>", "").strip()})
     return [{"role": "user", "content": content}]
 
-
-# ============================================================================
-# Task Loading and Instance Building
-# ============================================================================
 
 def get_fewshot_examples(
     docs: list[dict], num_fewshot: int, rng: random.Random, exclude_indices: set[int] | None = None,
@@ -217,10 +200,6 @@ def build_instances(
         ))
     return instances
 
-
-# ============================================================================
-# HTTP Client for OpenAI-compatible APIs
-# ============================================================================
 
 @dataclass
 class APIConfig:
@@ -324,10 +303,6 @@ async def run_generation(
 
     return instances
 
-
-# ============================================================================
-# Metrics
-# ============================================================================
 
 def normalize_text(
     text: str, ignore_case: bool = False, ignore_punctuation: bool = False,
@@ -439,10 +414,6 @@ def compute_metrics(instances: list[Instance], config: TaskConfig) -> dict[str, 
     return {name: sum(scores) / len(scores) for name, scores in metrics.items() if scores}
 
 
-# ============================================================================
-# LocalCompletionsAPI - Compatible interface for tests
-# ============================================================================
-
 class LocalCompletionsAPI:
     """OpenAI-compatible completions API client (lm_eval-compatible interface)."""
 
@@ -542,10 +513,6 @@ class LocalCompletionsAPI:
         return [choice.get("text", "") for out in outputs if out and "choices" in out for choice in out["choices"]]
 
 
-# ============================================================================
-# Main Evaluation Pipeline
-# ============================================================================
-
 def download_dataset(dataset_path: str, dataset_name: str | None = None) -> None:
     """Pre-download and cache dataset. Call before timed evaluation."""
     log.info(f"Pre-downloading: {dataset_path}")
@@ -598,15 +565,10 @@ async def evaluate_tasks(
     results = {}
     total_eval_time = 0.0
     for path in task_paths:
-        try:
-            result, eval_time = await evaluate_task(path, api_config, num_fewshot, limit, seed)
-            results[result.task] = (result, eval_time)
-            total_eval_time += eval_time
-            log.info(f"Task {result.task}: {result.metrics} ({eval_time:.2f}s)")
-        except Exception as e:
-            log.error(f"Error evaluating {path}: {e}")
-            import traceback
-            traceback.print_exc()
+        result, eval_time = await evaluate_task(path, api_config, num_fewshot, limit, seed)
+        results[result.task] = (result, eval_time)
+        total_eval_time += eval_time
+        log.info(f"Task {result.task}: {result.metrics} ({eval_time:.2f}s)")
     return results, total_eval_time
 
 
@@ -624,10 +586,6 @@ def find_task_configs(tasks_dir: Path, task_names: list[str]) -> list[Path]:
             log.warning(f"Task not found: {name}")
     return paths
 
-
-# ============================================================================
-# CLI
-# ============================================================================
 
 def main() -> int:
     """CLI: evaluate tasks against an OpenAI-compatible API."""

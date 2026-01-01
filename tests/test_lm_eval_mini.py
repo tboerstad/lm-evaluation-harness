@@ -24,10 +24,6 @@ def api():
     return LocalCompletionsAPI(base_url="http://test-api.example.com/v1/completions", model="gpt-3.5-turbo")
 
 
-# ============================================================================
-# HTTP Request Tests
-# ============================================================================
-
 class TestHTTPRequests:
     """Sync and async HTTP request formation."""
 
@@ -58,10 +54,6 @@ class TestHTTPRequests:
             asyncio.run(api.get_batched_requests(["Q1", "Q2", "Q3"], generate=True))
             assert mock_connector.call_args[1]["limit"] == 4
 
-
-# ============================================================================
-# Image/Multimodal Tests
-# ============================================================================
 
 class TestImageHandling:
     """Image encoding and multimodal message building."""
@@ -106,10 +98,6 @@ class TestImageHandling:
         assert TaskConfig(task="chartqa", dataset_path="chartqa", doc_to_image="image").is_multimodal is True
 
 
-# ============================================================================
-# Metrics Tests
-# ============================================================================
-
 class TestMetrics:
     """exact_match, relaxed_accuracy, anywhere_accuracy."""
 
@@ -138,10 +126,6 @@ class TestMetrics:
         assert anywhere_accuracy("I think it's about 50", "42") == 0.0
 
 
-# ============================================================================
-# Chat Payload Tests
-# ============================================================================
-
 class TestChatPayload:
     """Chat completions payload construction."""
 
@@ -159,10 +143,6 @@ class TestChatPayload:
         payload_with_stop = create_chat_payload(messages, config, gen_kwargs={"until": ["a", "b", "c", "d", "e"]})
         assert len(payload_with_stop["stop"]) == 4  # OpenAI limit
 
-
-# ============================================================================
-# Seed/Reproducibility Tests
-# ============================================================================
 
 class TestSeedReproducibility:
     """Seed ensures deterministic few-shot selection."""
