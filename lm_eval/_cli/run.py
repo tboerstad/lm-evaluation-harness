@@ -264,22 +264,6 @@ class Run(SubCommand):
             help="Display full task configuration after evaluation",
         )
         logging_group.add_argument(
-            "--wandb_args",
-            default=None,
-            nargs="+",
-            action=MergeDictAction,
-            metavar="<args>",
-            help="Weights & Biases init arguments key=val key2=val2",
-        )
-        logging_group.add_argument(
-            "--wandb_config_args",
-            default=None,
-            nargs="+",
-            action=MergeDictAction,
-            metavar="<args>",
-            help="Weights & Biases config arguments key=val key2=val2",
-        )
-        logging_group.add_argument(
             "--hf_hub_log_args",
             default=None,
             nargs="+",
@@ -345,12 +329,8 @@ class Run(SubCommand):
         cfg = EvaluatorConfig.from_cli(args)
 
         from lm_eval import simple_evaluate
-        from lm_eval.loggers import EvaluationTracker, WandbLogger
+        from lm_eval.loggers import EvaluationTracker
         from lm_eval.utils import handle_non_serializable, make_table
-
-        # Set up logging
-        if cfg.wandb_args:
-            wandb_logger = WandbLogger(cfg.wandb_args, cfg.wandb_config_args)
 
         # Set up evaluation tracker
         if cfg.output_path:
@@ -426,16 +406,6 @@ class Run(SubCommand):
 
             batch_sizes = ",".join(map(str, results["config"]["batch_sizes"]))
 
-            # W&B logging
-            if cfg.wandb_args:
-                try:
-                    wandb_logger.post_init(results)
-                    wandb_logger.log_eval_result()
-                    if cfg.log_samples:
-                        wandb_logger.log_eval_samples(samples)
-                except Exception as e:
-                    eval_logger.info(f"Logging to W&B failed: {e}")
-
             # Save results
             evaluation_tracker.save_results_aggregated(
                 results=results, samples=samples if cfg.log_samples else None
@@ -463,6 +433,3 @@ class Run(SubCommand):
             print(make_table(results))
             if "groups" in results:
                 print(make_table(results, "groups"))
-
-            if cfg.wandb_args:
-                wandb_logger.run.finish()

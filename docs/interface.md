@@ -127,8 +127,6 @@ lm-eval run --config my_config.yaml --tasks mmlu
 | `--verbosity` | `-v` | **(Deprecated)** Use `LMEVAL_LOG_LEVEL` env var instead. |
 | `--write_out` | `-w` | Print prompts for first few documents (for debugging). |
 | `--show_config` | | Display full task configuration after evaluation. |
-| `--wandb_args` | | Weights & Biases arguments as `key=val`. E.g., `project=my-project name=run-1`. |
-| `--wandb_config_args` | | Additional W&B config arguments. |
 | `--hf_hub_log_args` | | HuggingFace Hub logging arguments. See [HF Hub Logging](#huggingface-hub-logging). |
 
 ### Advanced Options

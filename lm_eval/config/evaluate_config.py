@@ -16,8 +16,6 @@ if TYPE_CHECKING:
 
 eval_logger = logging.getLogger(__name__)
 DICT_KEYS = [
-    "wandb_args",
-    "wandb_config_args",
     "hf_hub_log_args",
     "metadata",
     "model_args",
@@ -159,12 +157,6 @@ class EvaluatorConfig:
     )
 
     # External integrations
-    wandb_args: dict = field(
-        default_factory=dict, metadata={"help": "Arguments for wandb.init"}
-    )
-    wandb_config_args: dict = field(
-        default_factory=dict, metadata={"help": "Arguments for wandb.config.update"}
-    )
     hf_hub_log_args: dict = field(
         default_factory=dict, metadata={"help": "Arguments for HF Hub logging"}
     )

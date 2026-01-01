@@ -257,7 +257,6 @@ class TestRunCommand:
 
         # Mock configuration
         mock_cfg_instance = MagicMock()
-        mock_cfg_instance.wandb_args = None
         mock_cfg_instance.output_path = None
         mock_cfg_instance.hf_hub_log_args = {}
         mock_cfg_instance.include_path = None

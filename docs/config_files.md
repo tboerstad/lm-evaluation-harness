@@ -47,7 +47,6 @@ All configuration keys correspond directly to CLI arguments. See the [CLI Refere
 | `fewshot_as_multiturn` | bool/null | `null` | Multi-turn few-shot |
 | `include_path` | string/null | `null` | External tasks path |
 | `gen_kwargs` | dict | `{}` | Generation arguments |
-| `wandb_args` | dict | `{}` | W&B init arguments |
 | `hf_hub_log_args` | dict | `{}` | HF Hub logging |
 | `seed` | list/int | `[0,1234,1234,1234]` | Random seeds |
 | `trust_remote_code` | bool | `false` | Trust remote code |
@@ -74,14 +73,6 @@ device: cuda:0
 
 output_path: ./results/gpt2/
 log_samples: true
-
-wandb_args:
-  project: llm-evals
-  name: mistral-7b-instruct
-  tags:
-    - mistral
-    - instruct
-    - production
 
 hf_hub_log_args:
   hub_results_org: my-org

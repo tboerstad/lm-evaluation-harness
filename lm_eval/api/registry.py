@@ -47,14 +47,6 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast, overload
 
 eval_logger = logging.getLogger(__name__)
 
-# evaluate is optional - only needed for HF metrics
-try:
-    import evaluate as hf_evaluate
-    HAS_HF_EVALUATE = True
-except ImportError:
-    HAS_HF_EVALUATE = False
-    hf_evaluate = None
-
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -614,12 +606,11 @@ def register_metric(**args):
     return decorate
 
 
-def get_metric(name: str, hf_evaluate_metric: bool = False) -> Callable | None:
+def get_metric(name: str) -> Callable | None:
     """Get a metric function by name.
 
     Args:
         name: The metric name
-        hf_evaluate_metric: If True, skip the local registry and use HF evaluate
 
     Returns:
         The metric compute function, or None if not found
@@ -628,30 +619,10 @@ def get_metric(name: str, hf_evaluate_metric: bool = False) -> Callable | None:
     if len(metric_registry) == 0:
         import lm_eval.api.metrics  # noqa: F401
 
-    if not hf_evaluate_metric:
-        if name in metric_registry:
-            return metric_registry.get(name)
-        else:
-            eval_logger.warning(
-                f"Could not find registered metric '{name}' in lm-eval, searching in HF Evaluate library..."
-            )
-
-    if not HAS_HF_EVALUATE:
-        eval_logger.error(
-            f"Metric '{name}' not found in lm-eval registry and 'evaluate' library is not installed. "
-            "Install it with: pip install evaluate"
-        )
-        return None
-
-    try:
-        import evaluate as hf_evaluate
-
-        metric_object = hf_evaluate.load(name)
-        return metric_object.compute
-    except Exception:
-        eval_logger.error(
-            f"{name} not found in the evaluate library! Please check https://huggingface.co/evaluate-metric",
-        )
+    if name in metric_registry:
+        return metric_registry.get(name)
+    else:
+        eval_logger.warning(f"Could not find registered metric '{name}' in lm-eval.")
         return None
 
 
