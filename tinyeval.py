@@ -8,7 +8,9 @@ One abstraction: batch HTTP requests to an OpenAI-compatible API.
 
 from __future__ import annotations
 
+import argparse
 import asyncio
+import json
 
 from core import APIConfig
 from tasks import TASKS
@@ -33,9 +35,6 @@ async def evaluate(
 
 def main() -> int:
     """CLI entry point."""
-    import argparse
-    import json
-
     parser = argparse.ArgumentParser(description="tinyeval - Minimal LLM evaluation")
     parser.add_argument(
         "--tasks", required=True, help=f"Comma-separated: {', '.join(TASKS.keys())}"
