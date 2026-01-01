@@ -295,23 +295,23 @@ Added comprehensive integration tests for ChartQA and fixed YAML loading:
    Total: 36 tests passing
    ```
 
-### Phase 11: Remove Train/Val/Test Split Distinction
+### Phase 11: Remove Split Fields Entirely
 
-Simplified `lm_eval_mini.py` to use a single `split` field instead of separate test/train/val splits. This is intentional - the mini harness is designed for relative comparisons between inference frameworks, not for train/val separation.
+Simplified `lm_eval_mini.py` to ignore splits completely - loads all available data from the dataset. This is intentional - the mini harness is for relative comparisons between inference frameworks, not for train/val separation.
 
 1. **Simplified `TaskConfig`:**
-   - Removed: `test_split`, `training_split`, `fewshot_split`
-   - Added: Single `split` field (defaults to "test")
+   - Removed: `test_split`, `training_split`, `fewshot_split`, `split`
+   - No split configuration at all
 
-2. **Updated `get_fewshot_examples()`:**
+2. **Added `load_all_docs()`:**
+   - Loads all splits from dataset and concatenates them
+   - With `limit`: streams from first available split (test → validation → train)
+   - Without `limit`: loads entire dataset (all splits combined)
+
+3. **Updated `get_fewshot_examples()`:**
    - Now takes a `docs` list directly instead of dataset + config
-   - Samples few-shot examples from same split as evaluation
-   - Added optional `exclude_indices` parameter for avoiding duplicates
-
-3. **Updated `evaluate_task()`:**
-   - Uses `config.split` instead of `config.test_split`
-   - Loads single split from dataset
-   - Few-shot examples sampled from same loaded data
+   - Samples few-shot examples from loaded data
+   - Added optional `exclude_indices` parameter
 
 4. **Test updates:**
    - Updated seed reproducibility tests for new function signature

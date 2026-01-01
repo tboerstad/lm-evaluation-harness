@@ -43,15 +43,13 @@ OutputType = Literal["generate_until"]
 class TaskConfig:
     """YAML task configuration (dataset, prompts, metrics, generation settings).
 
-    Note: This mini implementation uses a single 'split' field instead of separate
-    test/train/val splits. This is intentional - the mini harness is designed for
-    relative comparisons between inference frameworks, not for train/val separation.
-    Few-shot examples are sampled from the same split as evaluation samples.
+    Note: This mini implementation loads all available splits combined. This is
+    intentional - the mini harness is for relative comparisons between inference
+    frameworks, not for train/val separation.
     """
     task: str
     dataset_path: str
     dataset_name: str | None = None
-    split: str = "test"  # Single split for both evaluation and few-shot sampling
     num_fewshot: int = 0
     output_type: OutputType = "generate_until"
     doc_to_text: str | None = None
@@ -553,6 +551,26 @@ class LocalCompletionsAPI:
 # Main Evaluation Pipeline
 # ============================================================================
 
+def load_all_docs(dataset_path: str, dataset_name: str | None, limit: int | None = None) -> list[dict]:
+    """Load all splits from dataset, concatenated. Use streaming if limit specified."""
+    if limit:
+        # Try common split names with streaming
+        for split in ["test", "validation", "train"]:
+            try:
+                stream = datasets.load_dataset(dataset_path, dataset_name, split=split, streaming=True)
+                return list(stream.take(limit))
+            except ValueError:
+                continue
+        raise ValueError(f"No valid split found in {dataset_path}")
+
+    # Load all splits and concatenate
+    dataset_dict = datasets.load_dataset(path=dataset_path, name=dataset_name)
+    all_docs = []
+    for split in dataset_dict:
+        all_docs.extend(list(dataset_dict[split]))
+    return all_docs
+
+
 async def evaluate_task(
     task_path: Path, api_config: APIConfig, num_fewshot: int | None = None,
     limit: int | None = None, seed: int = 42,
@@ -563,17 +581,9 @@ async def evaluate_task(
     if num_fewshot is not None:
         config.num_fewshot = num_fewshot
 
-    # Use streaming when limit is specified and no few-shot needed
-    if limit and config.num_fewshot == 0:
-        stream = datasets.load_dataset(config.dataset_path, config.dataset_name, split=config.split, streaming=True)
-        docs = list(stream.take(limit))
-        fewshot_context = ""
-    else:
-        dataset = datasets.load_dataset(path=config.dataset_path, name=config.dataset_name, split=config.split)
-        docs = list(dataset)[:limit] if limit else list(dataset)
-        rng = random.Random(seed)
-        # Sample few-shot examples from same split (simple approach for inference comparison)
-        fewshot_context = build_fewshot_context(config, get_fewshot_examples(docs, config.num_fewshot, rng))
+    docs = load_all_docs(config.dataset_path, config.dataset_name, limit)
+    rng = random.Random(seed)
+    fewshot_context = build_fewshot_context(config, get_fewshot_examples(docs, config.num_fewshot, rng))
 
     instances = build_instances(config, docs, fewshot_context)
     log.info(f"Built {len(instances)} instances")
