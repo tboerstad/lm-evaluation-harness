@@ -55,7 +55,7 @@ class TestHTTPRequests:
             mock_session.return_value.__aenter__.return_value = MagicMock(
                 post=lambda *a, **k: DummyAsyncContextManager(mock_resp)
             )
-            asyncio.run(api.get_batched_requests(["Q1", "Q2", "Q3"], [("k1",), ("k2",), ("k3",)], generate=True))
+            asyncio.run(api.get_batched_requests(["Q1", "Q2", "Q3"], generate=True))
             assert mock_connector.call_args[1]["limit"] == 4
 
 

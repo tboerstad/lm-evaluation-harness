@@ -23,7 +23,7 @@ import time
 from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any
 
 import aiohttp
 import datasets
@@ -36,8 +36,6 @@ log = logging.getLogger(__name__)
 # ============================================================================
 # Types
 # ============================================================================
-
-OutputType = Literal["generate_until"]
 
 
 @dataclass
@@ -52,7 +50,6 @@ class TaskConfig:
     dataset_path: str  # HuggingFace dataset path or local directory
     dataset_name: str | None = None  # Dataset configuration/subset name (if applicable)
     num_fewshot: int = 0  # Number of few-shot examples to prepend to each prompt
-    output_type: OutputType = "generate_until"  # Generation mode (only "generate_until" supported)
     doc_to_text: str | None = None  # Jinja2 template to convert document to input prompt
     doc_to_target: str | None = None  # Jinja2 template or field name for the expected answer
     doc_to_image: list[str] | str | None = None  # Document field(s) containing images for multimodal tasks
@@ -61,8 +58,6 @@ class TaskConfig:
     generation_kwargs: dict[str, Any] = field(default_factory=dict)  # API generation params (temperature, max_tokens, until)
     metric_list: list[dict[str, Any]] = field(default_factory=list)  # Metrics to compute (exact_match, relaxed_accuracy, etc.)
     filter_list: list[dict[str, Any]] | None = None  # Post-processing filters to extract answers from responses
-    process_docs: Callable[[Any], Any] | None = None  # Optional function to preprocess documents
-    metadata: dict[str, Any] | None = None  # Additional task metadata (version, description, etc.)
 
     @classmethod
     def from_yaml(cls, path: Path) -> TaskConfig:
@@ -109,7 +104,6 @@ class EvalResult:
     task: str  # Name of the evaluated task
     metrics: dict[str, float]  # Computed metric scores (e.g., {"exact_match": 0.85})
     num_samples: int  # Total number of evaluated samples
-    samples: list[dict[str, Any]] | None = None  # Optional per-sample details for debugging
 
 
 # ============================================================================
@@ -453,8 +447,8 @@ class LocalCompletionsAPI:
     """OpenAI-compatible completions API client (lm_eval-compatible interface)."""
 
     def __init__(
-        self, base_url: str, model: str = "gpt-3.5-turbo", tokenizer_backend: str | None = None,
-        num_concurrent: int = 1, batch_size: int = 1, max_retries: int = 3,
+        self, base_url: str, model: str = "gpt-3.5-turbo",
+        num_concurrent: int = 1, max_retries: int = 3,
         seed: int = 1234, timeout: int = 300, **kwargs: Any,
     ) -> None:
         self.base_url = base_url
@@ -505,7 +499,7 @@ class LocalCompletionsAPI:
             return None
 
     async def get_batched_requests(
-        self, requests: list[str], cache_keys: list[tuple[str, ...]],
+        self, requests: list[str],
         generate: bool = True, gen_kwargs: dict[str, Any] | None = None, **kwargs: Any,
     ) -> list[list[str] | list[tuple[float, bool]]]:
         """Async batched requests with concurrency control."""
