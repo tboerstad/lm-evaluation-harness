@@ -107,18 +107,13 @@ async def eval_gsm8k(config: APIConfig, limit: int | None = None) -> dict:
     """
     docs = []
     for split in ["test", "train"]:
-        try:
-            ds = datasets.load_dataset("gsm8k", "main", split=split, streaming=True)
-            for doc in ds:
-                docs.append(doc)
-                if limit and len(docs) >= limit:
-                    break
-        except ValueError:
-            continue
+        ds = datasets.load_dataset("gsm8k", "main", split=split, streaming=True)
+        for doc in ds:
+            docs.append(doc)
+            if limit and len(docs) >= limit:
+                break
         if limit and len(docs) >= limit:
             break
-    if not docs:
-        raise ValueError("No valid split found in gsm8k")
     targets = [_parse_target(d["answer"]) for d in docs]
 
     responses, elapsed = await run_task(

@@ -64,20 +64,13 @@ async def eval_chartqa(config: APIConfig, limit: int | None = None) -> dict:
     """
     docs = []
     for split in ["test", "validation", "train"]:
-        try:
-            ds = datasets.load_dataset(
-                "HuggingFaceM4/ChartQA", split=split, streaming=True
-            )
-            for doc in ds:
-                docs.append(doc)
-                if limit and len(docs) >= limit:
-                    break
-        except ValueError:
-            continue
+        ds = datasets.load_dataset("HuggingFaceM4/ChartQA", split=split, streaming=True)
+        for doc in ds:
+            docs.append(doc)
+            if limit and len(docs) >= limit:
+                break
         if limit and len(docs) >= limit:
             break
-    if not docs:
-        raise ValueError("No valid split found in HuggingFaceM4/ChartQA")
 
     targets = [
         d["label"][0] if isinstance(d["label"], list) else str(d["label"]) for d in docs
