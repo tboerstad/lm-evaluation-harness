@@ -35,6 +35,10 @@ liteval = "liteval:main"
 
 [tool.setuptools]
 py-modules = ["liteval"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"*" = ["tasks/**/*.yaml", "tasks/**/*.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]

@@ -131,6 +131,19 @@ config = APIConfig(
 --output         Save results to JSON file
 ```
 
+## Included Tasks
+
+liteval includes 200+ benchmark task configurations from the original lm-evaluation-harness:
+
+- **Math**: gsm8k, math, asdiv, svamp
+- **Reasoning**: arc, hellaswag, winogrande, piqa
+- **Knowledge**: mmlu, truthfulqa, triviaqa
+- **Code**: humaneval, mbpp
+- **Multimodal**: chartqa, docvqa, textvqa
+- And many more...
+
+Browse available tasks in the `tasks/` directory.
+
 ## License
 
 MIT

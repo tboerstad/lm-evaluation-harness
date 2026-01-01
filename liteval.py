@@ -642,7 +642,7 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=None, help="Limit number of samples")
     parser.add_argument("--num_concurrent", type=int, default=8, help="Concurrent requests")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--tasks_dir", type=str, default="lm_eval/tasks", help="Tasks directory")
+    parser.add_argument("--tasks_dir", type=str, default="tasks", help="Tasks directory")
     parser.add_argument("--output", type=str, default=None, help="Output JSON file")
     args = parser.parse_args()
 
