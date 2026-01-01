@@ -1,4 +1,4 @@
-"""Integration tests for ChartQA: dataset loading, instance building, and evaluation pipeline."""
+"""Integration tests for ChartQA: dataset loading and evaluation pipeline."""
 
 import asyncio
 from unittest.mock import AsyncMock, patch
@@ -13,6 +13,7 @@ class TestChartQADataset:
     def chartqa_samples(self):
         """Load ChartQA samples (streaming for speed)."""
         import datasets
+
         dataset = datasets.load_dataset("HuggingFaceM4/ChartQA", split="test", streaming=True)
         return list(dataset.take(3))
 
@@ -30,40 +31,24 @@ class TestChartQADataset:
         assert isinstance(sample["label"], list) and sample["label"]
 
 
-class TestChartQATaskConfig:
-    """ChartQA Python config validation."""
+class TestChartQATaskFunction:
+    """ChartQA task function validation."""
 
-    def test_config_has_multimodal_settings(self):
-        """Config is multimodal with correct settings."""
+    def test_task_is_registered(self):
+        """ChartQA is registered in TASKS."""
         from tinyeval import TASKS
-        config = TASKS["chartqa"]
 
-        assert config.task == "chartqa"
-        assert config.dataset_path == "HuggingFaceM4/ChartQA"
-        assert config.is_multimodal
-        assert "image" in config.doc_to_image
+        assert "chartqa" in TASKS
+        assert callable(TASKS["chartqa"])
 
+    def test_prompt_formatting(self):
+        """Prompt includes query and FINAL ANSWER instruction."""
+        from tinyeval import _format_chartqa_prompt
 
-class TestChartQAInstanceBuilding:
-    """Instance building from ChartQA data."""
-
-    @pytest.fixture(scope="class")
-    def chartqa_samples(self):
-        import datasets
-        dataset = datasets.load_dataset("HuggingFaceM4/ChartQA", split="test", streaming=True)
-        return list(dataset.take(3))
-
-    def test_instances_have_images_prompts_targets(self, chartqa_samples):
-        """Instances contain images, prompts with query, and targets from labels."""
-        from tinyeval import TASKS, build_instances
-        config = TASKS["chartqa"]
-        instances = build_instances(config, chartqa_samples)
-
-        assert len(instances) == len(chartqa_samples)
-        for i, inst in enumerate(instances):
-            assert inst.images, "Instance should have images"
-            assert chartqa_samples[i]["query"] in inst.prompt
-            assert inst.target == chartqa_samples[i]["label"][0]
+        prompt = _format_chartqa_prompt("What is the total?")
+        assert "What is the total?" in prompt
+        assert "FINAL ANSWER:" in prompt
+        assert "<image>" in prompt
 
 
 class TestChartQAMultimodal:
@@ -72,17 +57,18 @@ class TestChartQAMultimodal:
     @pytest.fixture(scope="class")
     def sample(self):
         import datasets
+
         dataset = datasets.load_dataset("HuggingFaceM4/ChartQA", split="test", streaming=True)
         return next(iter(dataset))
 
     def test_image_encodes_and_message_builds(self, sample):
         """Image encodes to base64, multimodal message has correct vision API format."""
-        from tinyeval import build_multimodal_message, encode_image_to_base64
+        from tinyeval import _build_vision_message, _encode_image
 
-        b64 = encode_image_to_base64(sample["image"])
+        b64 = _encode_image(sample["image"])
         assert b64 and isinstance(b64, str)
 
-        messages = build_multimodal_message(f"<image>{sample['query']}\nFINAL ANSWER:", [sample["image"]])
+        messages = _build_vision_message(f"<image>{sample['query']}\nFINAL ANSWER:", [sample["image"]])
         content = messages[0]["content"]
         assert content[0]["type"] == "image_url"
         assert "data:image/png;base64," in content[0]["image_url"]["url"]
@@ -93,34 +79,48 @@ class TestChartQAMultimodal:
 class TestChartQAEndToEnd:
     """End-to-end pipeline with mocked API."""
 
-    def test_full_pipeline_with_mock(self):
-        """Build instances, run generation with mock API, compute metrics."""
-        import datasets
-        from tinyeval import APIConfig, TASKS, build_instances, compute_metrics, run_generation
+    def test_complete_with_multimodal_prompts(self):
+        """complete() handles multimodal prompts with images."""
+        from tinyeval import APIConfig, _format_chartqa_prompt, complete
 
-        samples = list(datasets.load_dataset("HuggingFaceM4/ChartQA", split="test", streaming=True).take(2))
-        config = TASKS["chartqa"]
-        instances = build_instances(config, samples)
+        config = APIConfig(url="http://mock/v1/chat/completions", model="mock", api_key="test")
 
-        api_config = APIConfig(base_url="http://mock/v1/chat/completions", model="mock", api_key="test")
-        mock_response = {"choices": [{"message": {"content": f"FINAL ANSWER: {instances[0].target}"}}]}
+        # Create multimodal prompt
+        prompts = [(_format_chartqa_prompt("What is the value?"), ["base64_image_data"])]
+
+        mock_response = {"choices": [{"message": {"content": "FINAL ANSWER: 42"}}]}
 
         class MockResp:
             ok = True
+
             async def json(self):
                 return mock_response
 
         class MockContextManager:
             async def __aenter__(self):
                 return MockResp()
+
             async def __aexit__(self, *args):
                 pass
 
         with patch("tinyeval.aiohttp.ClientSession") as mock_session:
-            mock_session.return_value.__aenter__.return_value = AsyncMock(post=lambda *a, **k: MockContextManager())
-            instances = asyncio.run(run_generation(instances, api_config, config))
+            mock_session.return_value.__aenter__.return_value = AsyncMock(
+                post=lambda *a, **k: MockContextManager()
+            )
+            responses = asyncio.run(complete(prompts, config))
 
-        assert all(inst.response for inst in instances)
-        metrics = compute_metrics(instances, config)
-        assert "relaxed_accuracy" in metrics
-        assert "exact_match" in metrics
+        assert len(responses) == 1
+        assert "42" in responses[0]
+
+    def test_relaxed_match_scoring(self):
+        """Relaxed match handles FINAL ANSWER extraction and numeric tolerance."""
+        from tinyeval import _relaxed_match
+
+        # Exact match via FINAL ANSWER
+        assert _relaxed_match("FINAL ANSWER: 42", "42") == 1.0
+        # Numeric tolerance (5%)
+        assert _relaxed_match("FINAL ANSWER: 42", "40") == 1.0
+        # Case insensitive
+        assert _relaxed_match("FINAL ANSWER: Yes", "yes") == 1.0
+        # Miss
+        assert _relaxed_match("FINAL ANSWER: 100", "42") == 0.0
