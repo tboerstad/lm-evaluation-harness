@@ -1,13 +1,9 @@
-"""Integration tests for ChartQA: dataset loading, config parsing, instance building, and evaluation pipeline."""
+"""Integration tests for ChartQA: dataset loading, instance building, and evaluation pipeline."""
 
 import asyncio
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
-# Tasks directory is now at root level
-TASKS_DIR = Path(__file__).parent.parent / "tasks"
 
 
 class TestChartQADataset:
@@ -35,23 +31,17 @@ class TestChartQADataset:
 
 
 class TestChartQATaskConfig:
-    """ChartQA YAML config loading."""
+    """ChartQA Python config validation."""
 
-    @pytest.fixture
-    def config_path(self):
-        return TASKS_DIR / "chartqa" / "chartqa.yaml"
-
-    def test_config_loads_with_multimodal_settings(self, config_path):
-        """Config loads, is multimodal, has doc_to_text template and metrics."""
-        from tinyeval import TaskConfig
-        config = TaskConfig.from_yaml(config_path)
+    def test_config_has_multimodal_settings(self):
+        """Config is multimodal with correct settings."""
+        from tinyeval import TASKS
+        config = TASKS["chartqa"]
 
         assert config.task == "chartqa"
         assert config.dataset_path == "HuggingFaceM4/ChartQA"
         assert config.is_multimodal
         assert "image" in config.doc_to_image
-        assert "<image>" in config.doc_to_text and "{{query}}" in config.doc_to_text
-        assert config.metric_list
 
 
 class TestChartQAInstanceBuilding:
@@ -63,14 +53,10 @@ class TestChartQAInstanceBuilding:
         dataset = datasets.load_dataset("HuggingFaceM4/ChartQA", split="test", streaming=True)
         return list(dataset.take(3))
 
-    @pytest.fixture
-    def config(self):
-        from tinyeval import TaskConfig
-        return TaskConfig.from_yaml(TASKS_DIR / "chartqa" / "chartqa.yaml")
-
-    def test_instances_have_images_prompts_targets(self, chartqa_samples, config):
+    def test_instances_have_images_prompts_targets(self, chartqa_samples):
         """Instances contain images, prompts with query, and targets from labels."""
-        from tinyeval import build_instances
+        from tinyeval import TASKS, build_instances
+        config = TASKS["chartqa"]
         instances = build_instances(config, chartqa_samples)
 
         assert len(instances) == len(chartqa_samples)
@@ -96,7 +82,7 @@ class TestChartQAMultimodal:
         b64 = encode_image_to_base64(sample["image"])
         assert b64 and isinstance(b64, str)
 
-        messages = build_multimodal_message(f"<image>{sample['query']}\nFinal Answer:", [sample["image"]])
+        messages = build_multimodal_message(f"<image>{sample['query']}\nFINAL ANSWER:", [sample["image"]])
         content = messages[0]["content"]
         assert content[0]["type"] == "image_url"
         assert "data:image/png;base64," in content[0]["image_url"]["url"]
@@ -110,14 +96,14 @@ class TestChartQAEndToEnd:
     def test_full_pipeline_with_mock(self):
         """Build instances, run generation with mock API, compute metrics."""
         import datasets
-        from tinyeval import APIConfig, TaskConfig, build_instances, compute_metrics, run_generation
+        from tinyeval import APIConfig, TASKS, build_instances, compute_metrics, run_generation
 
         samples = list(datasets.load_dataset("HuggingFaceM4/ChartQA", split="test", streaming=True).take(2))
-        config = TaskConfig.from_yaml(TASKS_DIR / "chartqa" / "chartqa.yaml")
+        config = TASKS["chartqa"]
         instances = build_instances(config, samples)
 
         api_config = APIConfig(base_url="http://mock/v1/chat/completions", model="mock", api_key="test")
-        mock_response = {"choices": [{"message": {"content": f"Final Answer: {instances[0].target}"}}]}
+        mock_response = {"choices": [{"message": {"content": f"FINAL ANSWER: {instances[0].target}"}}]}
 
         class MockResp:
             ok = True
@@ -132,8 +118,9 @@ class TestChartQAEndToEnd:
 
         with patch("tinyeval.aiohttp.ClientSession") as mock_session:
             mock_session.return_value.__aenter__.return_value = AsyncMock(post=lambda *a, **k: MockContextManager())
-            instances = asyncio.run(run_generation(instances, api_config, is_multimodal=True))
+            instances = asyncio.run(run_generation(instances, api_config, config))
 
         assert all(inst.response for inst in instances)
         metrics = compute_metrics(instances, config)
-        assert "relaxed_accuracy" in metrics or "exact_match" in metrics
+        assert "relaxed_accuracy" in metrics
+        assert "exact_match" in metrics

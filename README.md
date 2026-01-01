@@ -4,12 +4,10 @@ Tiny Eval - A minimal harness for evaluating LLMs via OpenAI-compatible APIs.
 
 ## Features
 
-- **Single-file implementation** (~600 lines) - easy to understand and modify
 - **API-only** - works with any OpenAI-compatible endpoint (vLLM, TGI, Ollama, etc.)
 - **Async HTTP** - concurrent requests with configurable parallelism
-- **Multimodal** - supports vision tasks with images (ChartQA, etc.)
-- **YAML tasks** - 200+ task configurations included
-- **Minimal dependencies** - just `datasets`, `aiohttp`, `jinja2`, `pyyaml`, `pillow`
+- **Two built-in tasks** - GSM8K (text) and ChartQA (multimodal)
+- **Minimal dependencies** - just `datasets`, `aiohttp`, `pillow`
 
 ## Installation
 
@@ -17,33 +15,30 @@ Tiny Eval - A minimal harness for evaluating LLMs via OpenAI-compatible APIs.
 pip install -e .
 ```
 
-Or just copy `tinyeval.py` - it's a single file with no package dependencies.
-
 ## Usage
 
 ### Command Line
 
 ```bash
-# Evaluate GSM8K math benchmark
+# Evaluate GSM8K math benchmark (text)
 python tinyeval.py \
-    --tasks gsm8k \
+    --tasks gsm8k_llama \
     --model gpt-4 \
     --base_url http://localhost:8000/v1/chat/completions \
     --limit 100
 
-# Evaluate multimodal ChartQA
+# Evaluate ChartQA (multimodal)
 python tinyeval.py \
     --tasks chartqa \
     --model gpt-4-vision \
     --base_url http://localhost:8000/v1/chat/completions \
     --num_concurrent 4
 
-# Multiple tasks with few-shot examples
+# Both tasks
 python tinyeval.py \
-    --tasks gsm8k,hellaswag \
+    --tasks gsm8k_llama,chartqa \
     --model llama-3 \
     --base_url http://localhost:8000/v1/chat/completions \
-    --num_fewshot 5 \
     --output results.json
 ```
 
@@ -51,14 +46,13 @@ python tinyeval.py \
 
 ```python
 import asyncio
-from pathlib import Path
-from tinyeval import APIConfig, TaskConfig, build_instances, run_generation, compute_metrics, load_all_docs
+from tinyeval import APIConfig, TASKS, build_instances, run_generation, compute_metrics, load_docs
 
-# Load task configuration
-config = TaskConfig.from_yaml(Path("tasks/gsm8k/gsm8k.yaml"))
+# Get built-in task config
+config = TASKS["gsm8k_llama"]
 
 # Load dataset
-docs = load_all_docs(config.dataset_path, config.dataset_name, limit=100)
+docs = load_docs(config.dataset_path, config.dataset_name, limit=100)
 
 # Build evaluation instances
 instances = build_instances(config, docs)
@@ -71,7 +65,7 @@ api_config = APIConfig(
 )
 
 # Run evaluation
-instances = asyncio.run(run_generation(instances, api_config))
+instances = asyncio.run(run_generation(instances, api_config, config))
 
 # Compute metrics
 metrics = compute_metrics(instances, config)
@@ -82,52 +76,43 @@ print(f"Results: {metrics}")
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `--tasks` | Comma-separated task names | Required |
+| `--tasks` | Comma-separated task names (gsm8k_llama, chartqa) | Required |
 | `--model` | Model name for API requests | Required |
 | `--base_url` | Chat completions API endpoint | Required |
 | `--api_key` | API key (if needed) | "" |
-| `--num_fewshot` | Number of few-shot examples | None |
 | `--limit` | Limit number of samples | None |
 | `--num_concurrent` | Concurrent HTTP requests | 8 |
 | `--seed` | Random seed | 42 |
-| `--tasks_dir` | Directory with task YAML files | "tasks" |
 | `--output` | Output JSON file | None |
 
 ## Supported Tasks
 
-All YAML task configurations are included. Common tasks:
-
-- **Math**: `gsm8k`, `math`, `minerva_math`
-- **Reasoning**: `arc_challenge`, `hellaswag`, `winogrande`
-- **Knowledge**: `mmlu`, `triviaqa`, `naturalqs`
-- **Multimodal**: `chartqa`, `docvqa`, `textvqa`
-- **Code**: `humaneval`, `mbpp`
-
-See the `tasks/` directory for all available configurations.
+| Task | Type | Dataset | Description |
+|------|------|---------|-------------|
+| `gsm8k_llama` | Text | gsm8k | Grade school math with chain-of-thought (8-shot) |
+| `chartqa` | Multimodal | HuggingFaceM4/ChartQA | Chart question answering with images |
 
 ## Metrics
 
 Built-in metrics:
-- `exact_match` - Exact string match (with optional case/punctuation normalization)
+- `exact_match` - Exact string match (with normalization)
 - `relaxed_accuracy` - ChartQA metric with 5% numeric tolerance
-- `anywhere_accuracy` - Substring match anywhere in response
 
 ## Output Format
 
 ```json
 {
   "results": {
-    "gsm8k": {
-      "metrics": {"exact_match": 0.85},
+    "gsm8k_llama": {
+      "metrics": {"exact_match": 0.85, "relaxed_accuracy": 0.87},
       "num_samples": 100,
-      "evaluation_time_seconds": "45.2"
+      "time_seconds": 45.2
     }
   },
   "config": {
     "model": "gpt-4",
-    "num_fewshot": 5,
     "limit": 100
   },
-  "total_evaluation_time_seconds": "45.2"
+  "total_time_seconds": 45.2
 }
 ```
