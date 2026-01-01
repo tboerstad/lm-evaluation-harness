@@ -6,16 +6,16 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from tasks.chartqa import _format_chartqa_prompt, _relaxed_match
-from tasks.gsm8k import _extract_gsm8k_answer, _format_gsm8k_prompt
-from tinyeval import (
-    TASKS,
+from core import (
     APIConfig,
     _build_vision_message,
     _encode_image,
     _normalize,
     complete,
 )
+from tasks import TASKS
+from tasks.chartqa import _format_chartqa_prompt, _relaxed_match
+from tasks.gsm8k import _extract_gsm8k_answer, _format_gsm8k_prompt
 
 
 class TestImageHandling:

@@ -10,26 +10,8 @@ from __future__ import annotations
 
 import asyncio
 
-from core import (
-    APIConfig,
-    _build_vision_message,
-    _encode_image,
-    _normalize,
-    complete,
-)
+from core import APIConfig
 from tasks import TASKS
-
-# Re-export core utilities for backwards compatibility
-__all__ = [
-    "APIConfig",
-    "TASKS",
-    "_build_vision_message",
-    "_encode_image",
-    "_normalize",
-    "complete",
-    "evaluate",
-    "main",
-]
 
 
 async def evaluate(
