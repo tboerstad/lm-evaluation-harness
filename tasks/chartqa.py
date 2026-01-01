@@ -2,7 +2,7 @@
 ChartQA evaluation - multimodal chart understanding.
 
 Responsibilities:
-- Load ChartQA dataset (test → validation → train, stops at limit)
+- Load ChartQA dataset (test → val → train, stops at limit)
 - Format prompts with image and query
 - Extract "FINAL ANSWER:" from responses
 - Compute exact_match + relaxed_accuracy (5% tolerance)
@@ -66,7 +66,7 @@ async def eval_chartqa(config: APIConfig, limit: int | None = None) -> dict:
     Returns dict with relaxed_accuracy, num_samples, time_seconds.
     """
     docs = []
-    for split in ["test", "validation", "train"]:
+    for split in ["test", "val", "train"]:
         ds = datasets.load_dataset("HuggingFaceM4/ChartQA", split=split, streaming=True)
         for doc in ds:
             docs.append(doc)
