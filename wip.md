@@ -248,6 +248,53 @@ Created `lm_eval_mini.py` (~900 lines) - a standalone, minimal reimplementation 
    - Task configuration loading
    - Payload structure validation
 
+### Phase 10: ChartQA Integration Testing
+
+Added comprehensive integration tests for ChartQA and fixed YAML loading:
+
+1. **Fixed YAML `!function` tag handling** (`lm_eval_mini.py:64-78`):
+   - ChartQA config uses `!function utils.exact_match` syntax
+   - `yaml.safe_load()` doesn't support custom tags
+   - Added `FunctionTagLoader` class extending `yaml.SafeLoader`
+   - Custom constructor converts `!function` tags to strings
+
+2. **Created `tests/test_chartqa_integration.py`** (~350 lines):
+   - `TestChartQADatasetDownload` - Verifies HuggingFace dataset download
+   - `TestChartQATaskConfig` - Validates YAML config loading
+   - `TestChartQAInstanceBuilding` - Tests prompt/instance generation
+   - `TestChartQAMultimodalMessages` - Verifies image encoding and vision API format
+   - `TestChartQAEndToEnd` - Full pipeline test with mocked API
+   - `TestChartQADatasetFullLoad` - Verifies full dataset load
+
+3. **Test Coverage (18 new tests):**
+   | Test | Description |
+   |------|-------------|
+   | `test_dataset_downloads_successfully` | ChartQA downloads from HuggingFace |
+   | `test_dataset_has_required_fields` | Has image, query, label fields |
+   | `test_image_field_is_pil_image` | Image field is PIL Image |
+   | `test_query_field_is_string` | Query is non-empty string |
+   | `test_label_field_is_list` | Label is list of answers |
+   | `test_config_file_exists` | chartqa.yaml exists |
+   | `test_config_loads_successfully` | TaskConfig parses YAML |
+   | `test_config_has_multimodal_settings` | is_multimodal=True, doc_to_image set |
+   | `test_config_has_doc_to_text_template` | Template has <image>, {{query}} |
+   | `test_config_has_metrics` | metric_list is populated |
+   | `test_build_instances_creates_correct_count` | N samples → N instances |
+   | `test_instances_have_images` | Each instance has images extracted |
+   | `test_instances_have_prompts` | Prompts contain rendered query |
+   | `test_instances_have_targets` | Targets match label[0] |
+   | `test_image_encodes_to_base64` | PIL image → base64 string |
+   | `test_multimodal_message_built_correctly` | Vision API message format |
+   | `test_full_evaluation_pipeline_with_mock_api` | End-to-end with mocked HTTP |
+   | `test_full_dataset_load` | Non-streaming full load works |
+
+4. **Test Results:**
+   ```
+   tests/test_chartqa_integration.py: 18 passed
+   tests/test_lm_eval_mini.py: 18 passed
+   Total: 36 tests passing
+   ```
+
 ## Known Limitations
 - No local model inference (by design)
 - No multi-GPU support (by design)
