@@ -99,14 +99,12 @@ async def complete(
     ) as session:
         tasks = []
         for prompt in prompts:
-            # Build messages
             if isinstance(prompt, tuple):
                 text, images = prompt
                 messages = _build_vision_message(text, images)
             else:
                 messages = [{"role": "user", "content": prompt}]
 
-            # Build payload
             payload: dict[str, Any] = {
                 "model": config.model,
                 "messages": messages,
