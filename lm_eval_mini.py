@@ -599,14 +599,14 @@ async def evaluate_task(
 async def evaluate_tasks(
     task_paths: list[Path], api_config: APIConfig, num_fewshot: int | None = None,
     limit: int | None = None, seed: int = 42,
-) -> tuple[dict[str, EvalResult], float]:
-    """Evaluate multiple tasks sequentially, returning results and total eval time."""
+) -> tuple[dict[str, tuple[EvalResult, float]], float]:
+    """Evaluate multiple tasks sequentially, returning (result, time) per task and total time."""
     results = {}
     total_eval_time = 0.0
     for path in task_paths:
         try:
             result, eval_time = await evaluate_task(path, api_config, num_fewshot, limit, seed)
-            results[result.task] = result
+            results[result.task] = (result, eval_time)
             total_eval_time += eval_time
             log.info(f"Task {result.task}: {result.metrics} ({eval_time:.2f}s)")
         except Exception as e:
@@ -660,7 +660,10 @@ def main() -> int:
     results, total_eval_time = asyncio.run(evaluate_tasks(task_paths, api_config, args.num_fewshot, args.limit, args.seed))
 
     output = {
-        "results": {name: {"metrics": r.metrics, "num_samples": r.num_samples} for name, r in results.items()},
+        "results": {
+            name: {"metrics": r.metrics, "num_samples": r.num_samples, "evaluation_time_seconds": str(t)}
+            for name, (r, t) in results.items()
+        },
         "config": {"model": args.model, "num_fewshot": args.num_fewshot, "limit": args.limit},
         "total_evaluation_time_seconds": str(total_eval_time),
     }
