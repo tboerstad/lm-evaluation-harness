@@ -19,6 +19,7 @@ import logging
 import random
 import re
 import string
+import time
 from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
@@ -574,8 +575,8 @@ def load_all_docs(dataset_path: str, dataset_name: str | None, limit: int | None
 async def evaluate_task(
     task_path: Path, api_config: APIConfig, num_fewshot: int | None = None,
     limit: int | None = None, seed: int = 42,
-) -> EvalResult:
-    """Load task config, build instances, run generation, compute metrics."""
+) -> tuple[EvalResult, float]:
+    """Load task config, build instances, run generation, compute metrics. Returns (result, eval_time)."""
     config = TaskConfig.from_yaml(task_path)
     log.info(f"Evaluating task: {config.task} (multimodal: {config.is_multimodal})")
     if num_fewshot is not None:
@@ -588,26 +589,31 @@ async def evaluate_task(
     instances = build_instances(config, docs, fewshot_context)
     log.info(f"Built {len(instances)} instances")
 
+    start_time = time.perf_counter()
     instances = await run_generation(instances, api_config, is_multimodal=config.is_multimodal)
-    return EvalResult(task=config.task, metrics=compute_metrics(instances, config), num_samples=len(instances))
+    eval_time = time.perf_counter() - start_time
+
+    return EvalResult(task=config.task, metrics=compute_metrics(instances, config), num_samples=len(instances)), eval_time
 
 
 async def evaluate_tasks(
     task_paths: list[Path], api_config: APIConfig, num_fewshot: int | None = None,
     limit: int | None = None, seed: int = 42,
-) -> dict[str, EvalResult]:
-    """Evaluate multiple tasks sequentially, logging results."""
+) -> tuple[dict[str, EvalResult], float]:
+    """Evaluate multiple tasks sequentially, returning results and total eval time."""
     results = {}
+    total_eval_time = 0.0
     for path in task_paths:
         try:
-            result = await evaluate_task(path, api_config, num_fewshot, limit, seed)
+            result, eval_time = await evaluate_task(path, api_config, num_fewshot, limit, seed)
             results[result.task] = result
-            log.info(f"Task {result.task}: {result.metrics}")
+            total_eval_time += eval_time
+            log.info(f"Task {result.task}: {result.metrics} ({eval_time:.2f}s)")
         except Exception as e:
             log.error(f"Error evaluating {path}: {e}")
             import traceback
             traceback.print_exc()
-    return results
+    return results, total_eval_time
 
 
 def find_task_configs(tasks_dir: Path, task_names: list[str]) -> list[Path]:
@@ -651,11 +657,12 @@ def main() -> int:
         return 1
 
     api_config = APIConfig(base_url=args.base_url, model=args.model, api_key=args.api_key, num_concurrent=args.num_concurrent)
-    results = asyncio.run(evaluate_tasks(task_paths, api_config, args.num_fewshot, args.limit, args.seed))
+    results, total_eval_time = asyncio.run(evaluate_tasks(task_paths, api_config, args.num_fewshot, args.limit, args.seed))
 
     output = {
         "results": {name: {"metrics": r.metrics, "num_samples": r.num_samples} for name, r in results.items()},
         "config": {"model": args.model, "num_fewshot": args.num_fewshot, "limit": args.limit},
+        "total_evaluation_time_seconds": str(total_eval_time),
     }
     print(json.dumps(output, indent=2))
     if args.output:
