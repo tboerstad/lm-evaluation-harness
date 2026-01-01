@@ -370,3 +370,33 @@ Added single-line documentation for all dataclass fields in `lm_eval_mini.py`:
 - No HuggingFace evaluate metrics fallback (removed)
 - Task-specific optional dependencies removed (ifeval, math, multilingual) - tasks using these may have reduced functionality
 - Minimal implementation (`lm_eval_mini.py`) only supports GSM8K and ChartQA explicitly
+
+### Phase 13: Simplify LocalCompletionsAPI and Improve Naming
+
+Cleaned up `LocalCompletionsAPI` class in `lm_eval_mini.py` to remove unnecessary complexity inherited from the larger framework:
+
+1. **Removed unused `generate` flag:**
+   - The class had dual-mode functionality (generate vs logprobs) but logprobs mode was never used
+   - Removed `generate` parameter from `_create_payload()`, `model_call()`, `get_batched_requests()`
+   - Removed the dead logprobs code path that returned `{"echo": True, "logprobs": 1, ...}`
+
+2. **Renamed private fields for consistency with `APIConfig`:**
+   - `_seed` → `seed`
+   - `_max_gen_toks` → `max_tokens` (clearer than abbreviation "toks")
+   - `_concurrent` → `num_concurrent`
+
+3. **Simplified return type of `get_batched_requests()`:**
+   - Was: `list[list[str] | list[tuple[float, bool]]]` (union for logprobs mode)
+   - Now: `list[list[str]]` (only generation mode)
+
+4. **Clarified docstring:**
+   - Added note explaining this is for text completions (`/v1/completions`) vs chat completions used by the main evaluation pipeline
+
+5. **Fixed async mock bug in `test_chartqa_integration.py`:**
+   - The mock for `session.post()` was returning a coroutine, not an async context manager
+   - Real code uses `async with session.post(...) as resp:` which requires `__aenter__`/`__aexit__`
+   - Fixed by creating proper `MockContextManager` class
+
+6. **Updated tests:**
+   - Removed `generate=True` arguments from test calls
+   - All 18 mini tests passing
