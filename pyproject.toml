@@ -15,11 +15,8 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    # Dataset loading (HuggingFace datasets for benchmarks)
     "datasets>=2.16.0,<4.0",
-    # HTTP client
     "aiohttp",
-    # Image handling (for multimodal tasks)
     "pillow",
 ]
 
@@ -30,8 +27,7 @@ tinyeval = "tinyeval:main"
 dev = ["pytest", "pytest-cov", "ruff", "pre-commit"]
 
 [tool.setuptools]
-py-modules = ["tinyeval", "core"]
-packages = ["tasks"]
+py-modules = ["tinyeval"]
 
 [tool.ruff.lint]
 extend-select = ["E", "F", "I", "UP"]
@@ -39,4 +35,4 @@ ignore = ["E501"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
-known-first-party = ["tinyeval", "core", "tasks"]
+known-first-party = ["tinyeval"]

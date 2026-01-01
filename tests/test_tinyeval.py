@@ -6,16 +6,18 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from core import (
+from tinyeval import (
+    TASKS,
     APIConfig,
     _build_vision_message,
     _encode_image,
+    _extract_gsm8k_answer,
+    _format_chartqa_prompt,
+    _format_gsm8k_prompt,
     _normalize,
+    _relaxed_match,
     complete,
 )
-from tasks import TASKS
-from tasks.chartqa import _format_chartqa_prompt, _relaxed_match
-from tasks.gsm8k import _extract_gsm8k_answer, _format_gsm8k_prompt
 
 
 def _make_mock_session(response_data: dict):
@@ -130,7 +132,7 @@ class TestHTTPClient:
         config = APIConfig(url="http://test.com/v1/chat/completions", model="gpt-4")
         response = {"choices": [{"message": {"content": "The answer is 42"}}]}
 
-        with patch("core.aiohttp.ClientSession") as mock_session:
+        with patch("tinyeval.aiohttp.ClientSession") as mock_session:
             mock_session.return_value.__aenter__.return_value = _make_mock_session(
                 response
             )
@@ -145,7 +147,7 @@ class TestHTTPClient:
         )
         response = {"choices": [{"message": {"content": "I see a chart"}}]}
 
-        with patch("core.aiohttp.ClientSession") as mock_session:
+        with patch("tinyeval.aiohttp.ClientSession") as mock_session:
             mock_session.return_value.__aenter__.return_value = _make_mock_session(
                 response
             )
