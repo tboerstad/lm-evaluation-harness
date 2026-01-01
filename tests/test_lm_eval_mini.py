@@ -158,3 +158,49 @@ class TestChatPayload:
 
         payload_with_stop = create_chat_payload(messages, config, gen_kwargs={"until": ["a", "b", "c", "d", "e"]})
         assert len(payload_with_stop["stop"]) == 4  # OpenAI limit
+
+
+# ============================================================================
+# Seed/Reproducibility Tests
+# ============================================================================
+
+class TestSeedReproducibility:
+    """Seed ensures deterministic few-shot selection."""
+
+    def test_fewshot_same_seed_same_examples(self):
+        """Same seed produces identical few-shot examples."""
+        import random
+        from lm_eval_mini import TaskConfig, get_fewshot_examples
+
+        class MockDataset(dict):
+            pass
+        dataset = MockDataset()
+        dataset["train"] = [{"q": f"Q{i}", "a": f"A{i}"} for i in range(100)]
+
+        config = TaskConfig(task="test", dataset_path="test", training_split="train")
+
+        rng1 = random.Random(42)
+        rng2 = random.Random(42)
+        examples1 = get_fewshot_examples(config, dataset, 5, rng1)
+        examples2 = get_fewshot_examples(config, dataset, 5, rng2)
+
+        assert examples1 == examples2, "Same seed should produce identical examples"
+
+    def test_fewshot_different_seed_different_examples(self):
+        """Different seeds produce different few-shot examples."""
+        import random
+        from lm_eval_mini import TaskConfig, get_fewshot_examples
+
+        class MockDataset(dict):
+            pass
+        dataset = MockDataset()
+        dataset["train"] = [{"q": f"Q{i}", "a": f"A{i}"} for i in range(100)]
+
+        config = TaskConfig(task="test", dataset_path="test", training_split="train")
+
+        rng1 = random.Random(42)
+        rng2 = random.Random(99)
+        examples1 = get_fewshot_examples(config, dataset, 5, rng1)
+        examples2 = get_fewshot_examples(config, dataset, 5, rng2)
+
+        assert examples1 != examples2, "Different seeds should produce different examples"
