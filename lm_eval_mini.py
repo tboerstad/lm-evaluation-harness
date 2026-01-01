@@ -23,7 +23,7 @@ import time
 from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any, Callable
 
 import aiohttp
 import datasets
@@ -36,8 +36,6 @@ log = logging.getLogger(__name__)
 # ============================================================================
 # Types
 # ============================================================================
-
-OutputType = Literal["generate_until"]
 
 
 @dataclass
@@ -52,7 +50,6 @@ class TaskConfig:
     dataset_path: str  # HuggingFace dataset path or local directory
     dataset_name: str | None = None  # Dataset configuration/subset name (if applicable)
     num_fewshot: int = 0  # Number of few-shot examples to prepend to each prompt
-    output_type: OutputType = "generate_until"  # Generation mode (only "generate_until" supported)
     doc_to_text: str | None = None  # Jinja2 template to convert document to input prompt
     doc_to_target: str | None = None  # Jinja2 template or field name for the expected answer
     doc_to_image: list[str] | str | None = None  # Document field(s) containing images for multimodal tasks

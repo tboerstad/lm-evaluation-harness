@@ -320,12 +320,11 @@ Simplified `lm_eval_mini.py` to ignore splits completely - loads all available d
 
 Added single-line documentation for all dataclass fields in `lm_eval_mini.py`:
 
-1. **TaskConfig** - 15 fields documented:
+1. **TaskConfig** - 14 fields documented:
    - `task`: Unique identifier for the task
    - `dataset_path`: HuggingFace dataset path or local directory
    - `dataset_name`: Dataset configuration/subset name
    - `num_fewshot`: Number of few-shot examples to prepend
-   - `output_type`: Generation mode (only "generate_until" supported)
    - `doc_to_text`: Jinja2 template for input prompt
    - `doc_to_target`: Template or field name for expected answer
    - `doc_to_image`: Field(s) containing images for multimodal tasks
