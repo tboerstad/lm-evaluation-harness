@@ -131,7 +131,3 @@ Built-in metrics:
   "total_evaluation_time_seconds": "45.2"
 }
 ```
-
-## License
-
-MIT

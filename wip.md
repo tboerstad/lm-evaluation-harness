@@ -14,8 +14,7 @@ tinyeval/
 │   ├── test_tinyeval.py
 │   └── test_chartqa_integration.py
 ├── pyproject.toml    # Minimal dependencies
-├── README.md
-└── LICENSE.md
+└── README.md
 ```
 
 ## Core Components

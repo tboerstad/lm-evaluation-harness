@@ -14,7 +14,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 requires-python = ">=3.10"
-license = { text = "MIT" }
 dependencies = [
     # Dataset loading (HuggingFace datasets for benchmarks)
     "datasets>=2.16.0,<4.0",
