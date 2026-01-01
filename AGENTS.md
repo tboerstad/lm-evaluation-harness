@@ -2,13 +2,10 @@
 
 ## Setup (Run First)
 
-Before making any changes, create a virtual environment and install dependencies:
+The `.venv` directory is gitignored and won't exist in fresh sessions. Create it before making any changes:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-pre-commit install
+python -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]" && pre-commit install
 ```
 
 ## Workflow
