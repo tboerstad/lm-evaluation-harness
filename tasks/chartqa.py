@@ -1,4 +1,12 @@
-"""ChartQA task - multimodal chart understanding."""
+"""
+ChartQA evaluation - multimodal chart understanding.
+
+Responsibilities:
+- Load ChartQA dataset (test → validation → train, stops at limit)
+- Format prompts with image and query
+- Extract "FINAL ANSWER:" from responses
+- Compute exact_match + relaxed_accuracy (5% tolerance)
+"""
 
 from __future__ import annotations
 
@@ -54,18 +62,15 @@ async def eval_chartqa(config: APIConfig, limit: int | None = None) -> dict:
 
     Returns dict with relaxed_accuracy, num_samples, time_seconds.
     """
-    # Load - prefer test, then validation, then train (train last for limited runs)
+    docs = []
     for split in ["test", "validation", "train"]:
-        try:
-            ds = datasets.load_dataset(
-                "HuggingFaceM4/ChartQA", split=split, streaming=True
-            )
-            docs = list(ds.take(limit) if limit else ds)
+        ds = datasets.load_dataset("HuggingFaceM4/ChartQA", split=split, streaming=True)
+        for doc in ds:
+            docs.append(doc)
+            if limit and len(docs) >= limit:
+                break
+        if limit and len(docs) >= limit:
             break
-        except ValueError:
-            continue
-    else:
-        raise ValueError("No valid split found in HuggingFaceM4/ChartQA")
 
     targets = [
         d["label"][0] if isinstance(d["label"], list) else str(d["label"]) for d in docs

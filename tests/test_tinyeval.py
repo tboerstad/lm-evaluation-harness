@@ -1,4 +1,14 @@
-"""Tests for tinyeval: HTTP client, image handling, metrics, task functions."""
+"""
+Test suite for tinyeval.
+
+Coverage:
+- Image encoding (PIL→base64, paths, URL rejection)
+- Text normalization and metrics
+- GSM8K: prompt formatting, answer extraction
+- ChartQA: prompt formatting, relaxed matching
+- HTTP client: text and multimodal completions
+- Integration: end-to-end pipeline
+"""
 
 import asyncio
 import base64
@@ -178,8 +188,8 @@ class TestIntegration:
             patch("tasks.gsm8k.datasets.load_dataset") as mock_ds,
             patch("core.aiohttp.ClientSession") as mock_session,
         ):
-            # Mock streaming dataset with .take() method
-            mock_ds.return_value.take.return_value = mock_docs
+            # Mock streaming dataset as iterable
+            mock_ds.return_value.__iter__ = lambda self: iter(mock_docs)
             mock_session.return_value.__aenter__.return_value = _make_mock_session(
                 response
             )

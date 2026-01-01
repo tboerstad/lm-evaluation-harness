@@ -1,4 +1,12 @@
-"""GSM8K task - grade school math with chain of thought."""
+"""
+GSM8K evaluation - grade school math with chain-of-thought.
+
+Responsibilities:
+- Load gsm8k dataset (test → train, stops at limit)
+- Format 8-shot prompts with reasoning examples
+- Extract numeric answers from responses
+- Compute exact_match (normalized string comparison)
+"""
 
 from __future__ import annotations
 
@@ -97,8 +105,15 @@ async def eval_gsm8k(config: APIConfig, limit: int | None = None) -> dict:
 
     Returns dict with exact_match, num_samples, time_seconds.
     """
-    ds = datasets.load_dataset("gsm8k", "main", split="test", streaming=True)
-    docs = list(ds.take(limit) if limit else ds)
+    docs = []
+    for split in ["test", "train"]:
+        ds = datasets.load_dataset("gsm8k", "main", split=split, streaming=True)
+        for doc in ds:
+            docs.append(doc)
+            if limit and len(docs) >= limit:
+                break
+        if limit and len(docs) >= limit:
+            break
     targets = [_parse_target(d["answer"]) for d in docs]
 
     responses, elapsed = await run_task(
