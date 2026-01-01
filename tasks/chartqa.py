@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import re
-import time
 
 import datasets
 
-from core import APIConfig, _normalize, complete
+from core import APIConfig, _normalize, run_task
 
 # Pre-compiled regex patterns for _relaxed_match
 _FINAL_ANSWER_RE = re.compile(r"FINAL ANSWER:\s*(.+?)(?:\n|$)", re.IGNORECASE)
@@ -68,19 +67,17 @@ async def eval_chartqa(config: APIConfig, limit: int | None = None) -> dict:
     else:
         raise ValueError("No valid split found in HuggingFaceM4/ChartQA")
 
-    # Format prompts with images
-    prompts: list[tuple[str, list]] = [
-        (_format_chartqa_prompt(d["query"]), [d["image"]]) for d in docs
-    ]
     targets = [
         d["label"][0] if isinstance(d["label"], list) else str(d["label"]) for d in docs
     ]
 
     # Run inference
-    print(f"Evaluating: chartqa ({len(docs)} samples, multimodal)")
-    t0 = time.perf_counter()
-    responses = await complete(prompts, config, max_tokens=512)
-    elapsed = time.perf_counter() - t0
+    responses, elapsed = await run_task(
+        "chartqa",
+        config,
+        docs,
+        lambda d: (_format_chartqa_prompt(d["query"]), [d["image"]]),
+    )
 
     # Score
     correct = sum(_relaxed_match(r, t) for r, t in zip(responses, targets))
