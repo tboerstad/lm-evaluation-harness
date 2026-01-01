@@ -3,116 +3,45 @@ requires = ["setuptools>=64.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "lm_eval"
-version = "0.4.10.dev0"
-authors = [
-    { name = "EleutherAI", email = "contact@eleuther.ai" }
-]
-description = "A framework for evaluating language models via OpenAI-compatible APIs"
+name = "liteval"
+version = "0.1.0"
+description = "Lightweight LLM evaluation via OpenAI-compatible APIs"
 readme = "README.md"
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Programming Language :: Python :: 3",
-    "Operating System :: OS Independent",
-]
 requires-python = ">=3.10"
 license = { text = "MIT" }
-dependencies = [
-    # Dataset loading (still uses HF datasets for benchmark data)
-    "datasets>=2.16.0,<4.0",
-    "numpy",
-    # Evaluation utilities
-    "jsonlines",
-    "numexpr",
-    "pytablewriter",
-    "rouge-score>=0.0.4",
-    "sacrebleu>=1.5.0",
-    "scikit-learn>=0.24.1",
-    "tqdm-multiprocess",
-    "zstandard",
-    "dill",
-    "word2number",
-    "more_itertools",
-    # HTTP API dependencies
-    "requests",
-    "aiohttp",
-    "tenacity",
-    "tqdm",
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-
-[tool.setuptools.packages.find]
-include = ["lm_eval*"]
-
-# required to include yaml files in pip installation
-[tool.setuptools.package-data]
-lm_eval = ["**/*.yaml", "tasks/**/*"]
-
-[project.scripts]
-lm-eval = "lm_eval.__main__:cli_evaluate"
-lm_eval = "lm_eval.__main__:cli_evaluate"
-
-[project.urls]
-Homepage = "https://github.com/EleutherAI/lm-evaluation-harness"
-Repository = "https://github.com/EleutherAI/lm-evaluation-harness"
+dependencies = [
+    "aiohttp>=3.8.0",
+    "datasets>=2.16.0",
+    "jinja2>=3.0.0",
+    "pyyaml>=6.0",
+    "requests>=2.28.0",
+]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-cov", "pytest-xdist", "pre-commit", "ruff"]
-testing = ["pytest", "pytest-cov", "pytest-xdist"]
+dev = ["pytest", "pytest-asyncio", "ruff"]
+images = ["pillow>=9.0.0"]
 
-[dependency-groups]
-dev = ["lm_eval[dev]"]
+[project.scripts]
+liteval = "liteval:main"
+
+[tool.setuptools]
+py-modules = ["liteval"]
 
 [tool.ruff.lint]
-extend-select = [
-    "B",      # flake8-bugbear
-    "C419",   # unnecessary-comprehension-in-call
-    "D", # docstyle
-    "E",      # pycodestyle errors
-    "F",      # pyflakes
-    "FURB",   # refurb
-    "I",      # isort
-    "TC", # typecheck
-    "RUF034", # useless-if-else
-    "SIM",    # flake8-simplify
-    "UP",     # pyupgrade
-    "W605",   # invalid-escape-sequence
-]
-fixable = [
-    "F401",   # unused-import
-    "I001",   # unsorted-imports
-    "UP",     # pyupgrade fixes
-]
-ignore = [
-    # docstrings
-    "D10",    # missing-docstring
-        # docstrings
-    "D212", # start first line
-    "D415", # terminal punctuation
-    "D205", # missing blank line
-    "D417", # docs: undocumented param
-    "D200", # unnecessary line
-    "D202", # blank-line-after-function
-
-    "E111",   # indentation-with-invalid-multiple
-    "E114",   # indentation-with-invalid-multiple-comment
-    "E117",   # over-indented
-    "E402",   # module-import-not-at-top-of-file
-    "E501",   # line-too-long
-    "E701",   # multiple-statements-on-one-line-colon
-    "E731",   # lambda-assignment
-    "E741",   # ambiguous-variable-name
-    "SIM118", # dict-in-keys
-]
-
-[tool.ruff.lint.extend-per-file-ignores]
-"__init__.py" = ["F401","F402","F403"]
-"utils.py" = ["F401"]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
-known-first-party = ["lm_eval"]
-lines-after-imports = 2
 
-[tool.ruff.lint.pydocstyle]
-convention = "google"
-ignore-var-parameters = true
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
