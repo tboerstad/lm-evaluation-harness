@@ -74,12 +74,3 @@ def multiturn_to_singleturn(messages: list[Message]) -> list[dict[str, Any]]:
         res = [Message("user", "".join(m.to_text() for m in messages), "").to_dict()]
 
     return [system.to_dict()] + res if system else res
-
-
-def format_turn(content: str, role: str, type: str | None = None) -> dict[str, str]:
-    """Create a chat message dict with role, content, and optional type."""
-    return (
-        {"role": role, "content": content}
-        if not type
-        else {"type": type, "role": role, "content": content}
-    )

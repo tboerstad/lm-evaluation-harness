@@ -55,9 +55,6 @@ ALL_OUTPUT_TYPES = [
 eval_logger = logging.getLogger(__name__)
 
 
-TaskConfig = TaskConfig
-
-
 class Task(abc.ABC):
     """A task represents an entire benchmark including its dataset, problems,
     answers, and evaluation methods. See BoolQ for a simple example implementation

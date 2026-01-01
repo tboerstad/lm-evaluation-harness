@@ -533,8 +533,6 @@ def evaluate(
         for x, req in zip(resps, cloned_reqs, strict=True):
             req.resps.append(x)
 
-    RANK = 0
-    WORLD_SIZE = 1
     ### Postprocess outputs ###
     # TODO: del model here, maybe (idea: allow user to specify device of e.g. reward model separately)
     for task_output, limit in zip(eval_tasks, limits, strict=True):
@@ -559,9 +557,9 @@ def evaluate(
                 else None
             )
             doc_iterator = task.doc_iterator(
-                rank=RANK,
+                rank=0,
                 limit=limit,
-                world_size=WORLD_SIZE,
+                world_size=1,
                 samples=indices,
             )
             for doc_id, doc in doc_iterator:
@@ -599,88 +597,82 @@ def evaluate(
                 for metric, value in metrics.items():
                     task_output.sample_metrics[(metric, filter_key)].append(value)
 
-    # Single process execution (API-only mode)
-    if True:
-        ### Aggregate results over all datapoints ###
-        # aggregate results ; run bootstrap CIs
-        for task_output in eval_tasks:
-            task_output.calculate_aggregate_metric(bootstrap_iters=bootstrap_iters)
-        (
-            results,
-            samples,
-            configs,
-            versions,
-            num_fewshot,
-            higher_is_better,
-        ) = consolidate_results(eval_tasks)
+    ### Aggregate results over all datapoints ###
+    # aggregate results ; run bootstrap CIs
+    for task_output in eval_tasks:
+        task_output.calculate_aggregate_metric(bootstrap_iters=bootstrap_iters)
+    (
+        results,
+        samples,
+        configs,
+        versions,
+        num_fewshot,
+        higher_is_better,
+    ) = consolidate_results(eval_tasks)
 
-        ### Calculate group metrics ###
-        if bool(results):
-            results, versions, show_group_table, *_ = consolidate_group_results(
-                results, versions, task_dict
-            )
+    ### Calculate group metrics ###
+    if bool(results):
+        results, versions, show_group_table, *_ = consolidate_group_results(
+            results, versions, task_dict
+        )
 
-        results_agg, group_agg = prepare_print_tasks(task_dict, results)
-        subtask_list = get_subtask_list(task_dict)
+    results_agg, group_agg = prepare_print_tasks(task_dict, results)
+    subtask_list = get_subtask_list(task_dict)
 
-        # collect all higher_is_better values for metrics
-        # in the group's subtasks.
-        # TODO: clean this up ; unify with the below metric_list loop?
-        _higher_is_better = {}
-        for group, task_list in subtask_list.items():
-            if (
-                len(task_list) != 0
-            ):  # subtask list will list "task_name": [] for solo tasks
-                for task in task_list:
-                    for m, h in higher_is_better[task].items():
-                        if m not in _higher_is_better:
-                            _higher_is_better[m] = h
+    # collect all higher_is_better values for metrics
+    # in the group's subtasks.
+    _higher_is_better = {}
+    for group, task_list in subtask_list.items():
+        if (
+            len(task_list) != 0
+        ):  # subtask list will list "task_name": [] for solo tasks
+            for task in task_list:
+                for m, h in higher_is_better[task].items():
+                    if m not in _higher_is_better:
+                        _higher_is_better[m] = h
 
-                        if (
-                            m in _higher_is_better
-                            and _higher_is_better[m] is not None
-                            and _higher_is_better[m] != h
-                        ):
-                            eval_logger.warning(
-                                f"Higher_is_better values for metric {m} in group {group} are not consistent. Defaulting to None."
-                            )
-                            _higher_is_better[m] = None
-                higher_is_better[group] = _higher_is_better
+                    if (
+                        m in _higher_is_better
+                        and _higher_is_better[m] is not None
+                        and _higher_is_better[m] != h
+                    ):
+                        eval_logger.warning(
+                            f"Higher_is_better values for metric {m} in group {group} are not consistent. Defaulting to None."
+                        )
+                        _higher_is_better[m] = None
+            higher_is_better[group] = _higher_is_better
 
-        results_dict = {
-            "results": dict(results_agg.items()),
-            **(
-                {"groups": dict(group_agg.items())}
-                if (bool(group_agg) & show_group_table)
-                else {}
-            ),
-            "group_subtasks": dict(reversed(subtask_list.items())),
-            "configs": dict(sorted(configs.items())),
-            "versions": dict(sorted(versions.items())),
-            "n-shot": dict(sorted(num_fewshot.items())),
-            "higher_is_better": dict(sorted(higher_is_better.items())),
-            "n-samples": {
-                task_output.task_name: {
-                    "original": len(task_output.task.eval_docs),
-                    "effective": min(
-                        limit if limit else len(task_output.task.eval_docs),
-                        len(task_output.task.eval_docs),
-                    ),
-                }
-                for task_output, limit in zip(eval_tasks, limits, strict=True)
-            },
-        }
-        if log_samples:
-            # default: hash images
-            samples = (
-                hash_dict_images(samples)
-                if os.environ.get("LMEVAL_HASHMM", "1") != "0"
-                and (hasattr(lm, "MULTIMODAL"))
-                else samples
-            )
-            results_dict["samples"] = dict(samples)
+    results_dict = {
+        "results": dict(results_agg.items()),
+        **(
+            {"groups": dict(group_agg.items())}
+            if (bool(group_agg) & show_group_table)
+            else {}
+        ),
+        "group_subtasks": dict(reversed(subtask_list.items())),
+        "configs": dict(sorted(configs.items())),
+        "versions": dict(sorted(versions.items())),
+        "n-shot": dict(sorted(num_fewshot.items())),
+        "higher_is_better": dict(sorted(higher_is_better.items())),
+        "n-samples": {
+            task_output.task_name: {
+                "original": len(task_output.task.eval_docs),
+                "effective": min(
+                    limit if limit else len(task_output.task.eval_docs),
+                    len(task_output.task.eval_docs),
+                ),
+            }
+            for task_output, limit in zip(eval_tasks, limits, strict=True)
+        },
+    }
+    if log_samples:
+        # default: hash images
+        samples = (
+            hash_dict_images(samples)
+            if os.environ.get("LMEVAL_HASHMM", "1") != "0"
+            and (hasattr(lm, "MULTIMODAL"))
+            else samples
+        )
+        results_dict["samples"] = dict(samples)
 
-        return results_dict
-
-    else:
-        return None
+    return results_dict
