@@ -31,7 +31,7 @@ class TestHTTPRequests:
         """Verify payload contains model, max_tokens, seed, and stop sequences."""
         with patch("requests.post") as mock_post:
             mock_post.return_value = MagicMock(json=lambda: {"choices": [{"text": "42"}]})
-            api.model_call(["What is 2+2?"], generate=True, gen_kwargs={"max_tokens": 100, "until": ["Q:", "</s>"]})
+            api.model_call(["What is 2+2?"], gen_kwargs={"max_tokens": 100, "until": ["Q:", "</s>"]})
 
             payload = mock_post.call_args[1]["json"]
             assert payload["model"] == "gpt-3.5-turbo"
@@ -51,7 +51,7 @@ class TestHTTPRequests:
             mock_session.return_value.__aenter__.return_value = MagicMock(
                 post=lambda *a, **k: DummyAsyncContextManager(mock_resp)
             )
-            asyncio.run(api.get_batched_requests(["Q1", "Q2", "Q3"], generate=True))
+            asyncio.run(api.get_batched_requests(["Q1", "Q2", "Q3"]))
             assert mock_connector.call_args[1]["limit"] == 4
 
 

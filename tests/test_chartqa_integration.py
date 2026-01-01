@@ -116,15 +116,19 @@ class TestChartQAEndToEnd:
         api_config = APIConfig(base_url="http://mock/v1/chat/completions", model="mock", api_key="test")
         mock_response = {"choices": [{"message": {"content": f"Final Answer: {instances[0].target}"}}]}
 
-        async def mock_post(*args, **kwargs):
-            class MockResp:
-                ok = True
-                async def json(self):
-                    return mock_response
-            return MockResp()
+        class MockResp:
+            ok = True
+            async def json(self):
+                return mock_response
+
+        class MockContextManager:
+            async def __aenter__(self):
+                return MockResp()
+            async def __aexit__(self, *args):
+                pass
 
         with patch("lm_eval_mini.aiohttp.ClientSession") as mock_session:
-            mock_session.return_value.__aenter__.return_value = AsyncMock(post=mock_post)
+            mock_session.return_value.__aenter__.return_value = AsyncMock(post=lambda *a, **k: MockContextManager())
             instances = asyncio.run(run_generation(instances, api_config, is_multimodal=True))
 
         assert all(inst.response for inst in instances)

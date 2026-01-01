@@ -415,18 +415,22 @@ def compute_metrics(instances: list[Instance], config: TaskConfig) -> dict[str, 
 
 
 class LocalCompletionsAPI:
-    """OpenAI-compatible completions API client (lm_eval-compatible interface)."""
+    """OpenAI-compatible text completions API client (/v1/completions endpoint).
+
+    Note: This is for text completions, not chat completions. The main evaluation
+    pipeline uses chat completions via run_generation() with APIConfig.
+    """
 
     def __init__(
         self, base_url: str, model: str = "gpt-3.5-turbo",
         num_concurrent: int = 1, max_retries: int = 3,
-        seed: int = 1234, timeout: int = 300, **kwargs: Any,
+        seed: int = 1234, timeout: int = 300, max_tokens: int = 256, **kwargs: Any,
     ) -> None:
         self.base_url = base_url
         self.model = model
-        self._seed = seed
-        self._max_gen_toks = 256
-        self._concurrent = num_concurrent
+        self.seed = seed
+        self.max_tokens = max_tokens
+        self.num_concurrent = num_concurrent
         self.max_retries = max_retries
         self.timeout = timeout
 
@@ -436,30 +440,27 @@ class LocalCompletionsAPI:
         return {"Authorization": f"Bearer {k}"} if (k := getattr(self, "api_key", "")) else {}
 
     def _create_payload(
-        self, messages: str | list[str], generate: bool = False,
-        gen_kwargs: dict[str, Any] | None = None, seed: int = 1234, eos: str | None = None, **kwargs: Any,
+        self, messages: str | list[str],
+        gen_kwargs: dict[str, Any] | None = None, eos: str | None = None, **kwargs: Any,
     ) -> dict[str, Any]:
-        """Build completions API payload for generate or logprobs mode."""
+        """Build text completions API payload."""
         gen_kwargs = gen_kwargs or {}
-        if generate:
-            gen_kwargs.pop("do_sample", None)
-            max_tokens = gen_kwargs.pop("max_tokens", None) or gen_kwargs.pop("max_gen_toks", self._max_gen_toks)
-            stop = handle_stop_sequences(gen_kwargs.pop("until", None))
-            if eos and eos not in stop:
-                stop.append(eos)
-            return {"prompt": messages, "model": self.model, "max_tokens": max_tokens,
-                    "temperature": gen_kwargs.pop("temperature", 0), "stop": stop or None, "seed": seed, **gen_kwargs}
-        return {"model": self.model, "prompt": messages, "temperature": 0,
-                "max_tokens": 1, "logprobs": 1, "seed": seed, "echo": True}
+        gen_kwargs.pop("do_sample", None)
+        max_tokens = gen_kwargs.pop("max_tokens", None) or gen_kwargs.pop("max_gen_toks", self.max_tokens)
+        stop = handle_stop_sequences(gen_kwargs.pop("until", None))
+        if eos and eos not in stop:
+            stop.append(eos)
+        return {"prompt": messages, "model": self.model, "max_tokens": max_tokens,
+                "temperature": gen_kwargs.pop("temperature", 0), "stop": stop or None, "seed": self.seed, **gen_kwargs}
 
     def model_call(
-        self, messages: str | list[str], generate: bool = True,
+        self, messages: str | list[str],
         gen_kwargs: dict[str, Any] | None = None, **kwargs: Any,
     ) -> dict[str, Any] | None:
         """Synchronous API request."""
         import requests
         payload = {k: v for k, v in self._create_payload(
-            messages, generate, copy.deepcopy(gen_kwargs) if gen_kwargs else {}, self._seed, **kwargs
+            messages, copy.deepcopy(gen_kwargs) if gen_kwargs else {}, **kwargs
         ).items() if v is not None}
         try:
             resp = requests.post(self.base_url, json=payload, headers=self.header)
@@ -471,15 +472,15 @@ class LocalCompletionsAPI:
 
     async def get_batched_requests(
         self, requests: list[str],
-        generate: bool = True, gen_kwargs: dict[str, Any] | None = None, **kwargs: Any,
-    ) -> list[list[str] | list[tuple[float, bool]]]:
+        gen_kwargs: dict[str, Any] | None = None, **kwargs: Any,
+    ) -> list[list[str]]:
         """Async batched requests with concurrency control."""
         gen_kwargs = copy.deepcopy(gen_kwargs) if gen_kwargs else {}
-        semaphore = asyncio.Semaphore(self._concurrent)
+        semaphore = asyncio.Semaphore(self.num_concurrent)
 
         async def make_single(session: aiohttp.ClientSession, msg: str) -> dict[str, Any] | None:
             payload = {k: v for k, v in self._create_payload(
-                msg, generate, copy.deepcopy(gen_kwargs), self._seed, **kwargs
+                msg, copy.deepcopy(gen_kwargs), **kwargs
             ).items() if v is not None}
             async with semaphore:
                 try:
@@ -491,12 +492,12 @@ class LocalCompletionsAPI:
                     return None
 
         async with aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(limit=self._concurrent),
+            connector=aiohttp.TCPConnector(limit=self.num_concurrent),
             timeout=aiohttp.ClientTimeout(total=self.timeout)
         ) as session:
             responses = await asyncio.gather(*[make_single(session, msg) for msg in requests])
 
-        return [[self._parse_generation(r)] if generate else [(0.0, True)] for r in responses]
+        return [[self._parse_generation(r)] for r in responses]
 
     @staticmethod
     def _parse_generation(response: dict[str, Any] | None) -> str:
