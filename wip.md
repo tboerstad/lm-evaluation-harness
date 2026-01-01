@@ -1,17 +1,17 @@
-# liteeval - Lightweight LM Evaluation
+# tinyeval - Tiny Eval
 
 ## Overview
 
-liteeval is a minimal, single-file evaluation harness for LLMs via OpenAI-compatible APIs. It was created by stripping down lm-evaluation-harness to remove all local model backends and heavy dependencies (torch, transformers, etc.).
+tinyeval is a minimal, single-file evaluation harness for LLMs via OpenAI-compatible APIs. It was created by stripping down lm-evaluation-harness to remove all local model backends and heavy dependencies (torch, transformers, etc.).
 
 ## Final Architecture
 
 ```
-liteeval/
-├── liteeval.py       # Single-file harness (~600 lines)
+tinyeval/
+├── tinyeval.py       # Single-file harness (~600 lines)
 ├── tasks/            # 200+ YAML task configurations
 ├── tests/            # 18 passing tests
-│   ├── test_liteeval.py
+│   ├── test_tinyeval.py
 │   └── test_chartqa_integration.py
 ├── pyproject.toml    # Minimal dependencies
 ├── README.md
@@ -20,7 +20,7 @@ liteeval/
 
 ## Core Components
 
-### liteeval.py (~600 lines)
+### tinyeval.py (~600 lines)
 
 **Dataclasses:**
 - `TaskConfig` - YAML task configuration (dataset, prompts, metrics, generation settings)
@@ -74,20 +74,22 @@ pillow              # Image handling
 - Added comprehensive tests
 
 ### Phase 14: Rebrand to liteeval
-- Renamed `lm_eval_mini.py` → `liteeval.py`
+
+### Phase 15: Rebrand to tinyeval
+- Renamed `lm_eval_mini.py` → `tinyeval.py`
 - Moved `lm_eval/tasks/` → `tasks/`
 - Deleted entire `lm_eval/` package (~12K lines)
 - Removed `docs/`, `examples/`, `scripts/`, `templates/`
 - Removed `.github/`, `CITATION.bib`, `CODEOWNERS`, etc.
 - Updated `pyproject.toml` with new name and minimal deps
-- Rewrote `README.md` for liteeval
+- Rewrote `README.md` for tinyeval
 
 ## Usage
 
 ### Command Line
 
 ```bash
-python liteeval.py \
+python tinyeval.py \
     --tasks gsm8k \
     --model gpt-4 \
     --base_url http://localhost:8000/v1/chat/completions \
@@ -99,7 +101,7 @@ python liteeval.py \
 ```python
 import asyncio
 from pathlib import Path
-from liteeval import APIConfig, TaskConfig, build_instances, run_generation, compute_metrics, load_all_docs
+from tinyeval import APIConfig, TaskConfig, build_instances, run_generation, compute_metrics, load_all_docs
 
 config = TaskConfig.from_yaml(Path("tasks/gsm8k/gsm8k.yaml"))
 docs = load_all_docs(config.dataset_path, config.dataset_name, limit=100)

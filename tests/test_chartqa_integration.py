@@ -43,7 +43,7 @@ class TestChartQATaskConfig:
 
     def test_config_loads_with_multimodal_settings(self, config_path):
         """Config loads, is multimodal, has doc_to_text template and metrics."""
-        from liteeval import TaskConfig
+        from tinyeval import TaskConfig
         config = TaskConfig.from_yaml(config_path)
 
         assert config.task == "chartqa"
@@ -65,12 +65,12 @@ class TestChartQAInstanceBuilding:
 
     @pytest.fixture
     def config(self):
-        from liteeval import TaskConfig
+        from tinyeval import TaskConfig
         return TaskConfig.from_yaml(TASKS_DIR / "chartqa" / "chartqa.yaml")
 
     def test_instances_have_images_prompts_targets(self, chartqa_samples, config):
         """Instances contain images, prompts with query, and targets from labels."""
-        from liteeval import build_instances
+        from tinyeval import build_instances
         instances = build_instances(config, chartqa_samples)
 
         assert len(instances) == len(chartqa_samples)
@@ -91,7 +91,7 @@ class TestChartQAMultimodal:
 
     def test_image_encodes_and_message_builds(self, sample):
         """Image encodes to base64, multimodal message has correct vision API format."""
-        from liteeval import build_multimodal_message, encode_image_to_base64
+        from tinyeval import build_multimodal_message, encode_image_to_base64
 
         b64 = encode_image_to_base64(sample["image"])
         assert b64 and isinstance(b64, str)
@@ -110,7 +110,7 @@ class TestChartQAEndToEnd:
     def test_full_pipeline_with_mock(self):
         """Build instances, run generation with mock API, compute metrics."""
         import datasets
-        from liteeval import APIConfig, TaskConfig, build_instances, compute_metrics, run_generation
+        from tinyeval import APIConfig, TaskConfig, build_instances, compute_metrics, run_generation
 
         samples = list(datasets.load_dataset("HuggingFaceM4/ChartQA", split="test", streaming=True).take(2))
         config = TaskConfig.from_yaml(TASKS_DIR / "chartqa" / "chartqa.yaml")
@@ -130,7 +130,7 @@ class TestChartQAEndToEnd:
             async def __aexit__(self, *args):
                 pass
 
-        with patch("liteeval.aiohttp.ClientSession") as mock_session:
+        with patch("tinyeval.aiohttp.ClientSession") as mock_session:
             mock_session.return_value.__aenter__.return_value = AsyncMock(post=lambda *a, **k: MockContextManager())
             instances = asyncio.run(run_generation(instances, api_config, is_multimodal=True))
 

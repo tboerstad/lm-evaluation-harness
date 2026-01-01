@@ -1,6 +1,6 @@
-# liteeval
+# tinyeval
 
-Lightweight LM Evaluation - A minimal harness for evaluating LLMs via OpenAI-compatible APIs.
+Tiny Eval - A minimal harness for evaluating LLMs via OpenAI-compatible APIs.
 
 ## Features
 
@@ -17,7 +17,7 @@ Lightweight LM Evaluation - A minimal harness for evaluating LLMs via OpenAI-com
 pip install -e .
 ```
 
-Or just copy `liteeval.py` - it's a single file with no package dependencies.
+Or just copy `tinyeval.py` - it's a single file with no package dependencies.
 
 ## Usage
 
@@ -25,21 +25,21 @@ Or just copy `liteeval.py` - it's a single file with no package dependencies.
 
 ```bash
 # Evaluate GSM8K math benchmark
-python liteeval.py \
+python tinyeval.py \
     --tasks gsm8k \
     --model gpt-4 \
     --base_url http://localhost:8000/v1/chat/completions \
     --limit 100
 
 # Evaluate multimodal ChartQA
-python liteeval.py \
+python tinyeval.py \
     --tasks chartqa \
     --model gpt-4-vision \
     --base_url http://localhost:8000/v1/chat/completions \
     --num_concurrent 4
 
 # Multiple tasks with few-shot examples
-python liteeval.py \
+python tinyeval.py \
     --tasks gsm8k,hellaswag \
     --model llama-3 \
     --base_url http://localhost:8000/v1/chat/completions \
@@ -52,7 +52,7 @@ python liteeval.py \
 ```python
 import asyncio
 from pathlib import Path
-from liteeval import APIConfig, TaskConfig, build_instances, run_generation, compute_metrics, load_all_docs
+from tinyeval import APIConfig, TaskConfig, build_instances, run_generation, compute_metrics, load_all_docs
 
 # Load task configuration
 config = TaskConfig.from_yaml(Path("tasks/gsm8k/gsm8k.yaml"))

@@ -3,9 +3,9 @@ requires = ["setuptools>=64.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "liteeval"
+name = "tinyeval"
 version = "1.0.0"
-description = "Lightweight LM Evaluation - A minimal harness for evaluating LLMs via OpenAI-compatible APIs"
+description = "Tiny Eval - A minimal harness for evaluating LLMs via OpenAI-compatible APIs"
 readme = "README.md"
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -29,13 +29,13 @@ dependencies = [
 ]
 
 [project.scripts]
-liteeval = "liteeval:main"
+tinyeval = "tinyeval:main"
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov", "ruff"]
 
 [tool.setuptools]
-py-modules = ["liteeval"]
+py-modules = ["tinyeval"]
 
 [tool.setuptools.package-data]
 "*" = ["tasks/**/*.yaml"]
@@ -46,4 +46,4 @@ ignore = ["E501"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
-known-first-party = ["liteeval"]
+known-first-party = ["tinyeval"]

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-liteeval - Lightweight LM Evaluation
+tinyeval - Tiny Eval
 
 A minimal, typed evaluation harness for LLMs via OpenAI-compatible APIs.
 
@@ -593,7 +593,7 @@ def find_task_configs(tasks_dir: Path, task_names: list[str]) -> list[Path]:
 def main() -> int:
     """CLI: evaluate tasks against an OpenAI-compatible API."""
     import argparse
-    parser = argparse.ArgumentParser(description="liteeval - Lightweight LM Evaluation")
+    parser = argparse.ArgumentParser(description="tinyeval - Tiny Eval")
     parser.add_argument("--tasks", type=str, required=True, help="Comma-separated task names")
     parser.add_argument("--model", type=str, required=True, help="Model name")
     parser.add_argument("--base_url", type=str, required=True, help="API base URL (chat completions endpoint)")
