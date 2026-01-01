@@ -9,12 +9,12 @@ import pytest
 from tasks.chartqa import _format_chartqa_prompt, _relaxed_match
 from tasks.gsm8k import _extract_gsm8k_answer, _format_gsm8k_prompt
 from tinyeval import (
+    TASKS,
     APIConfig,
     _build_vision_message,
     _encode_image,
     _normalize,
     complete,
-    get_tasks,
 )
 
 
@@ -120,7 +120,7 @@ class TestHTTPClient:
             async def __aexit__(self, *args):
                 pass
 
-        with patch("tinyeval.aiohttp.ClientSession") as mock_session:
+        with patch("core.aiohttp.ClientSession") as mock_session:
             mock_session.return_value.__aenter__.return_value = AsyncMock(
                 post=lambda *a, **k: MockContextManager()
             )
@@ -148,7 +148,7 @@ class TestHTTPClient:
             async def __aexit__(self, *args):
                 pass
 
-        with patch("tinyeval.aiohttp.ClientSession") as mock_session:
+        with patch("core.aiohttp.ClientSession") as mock_session:
             mock_session.return_value.__aenter__.return_value = AsyncMock(
                 post=lambda *a, **k: MockContextManager()
             )
@@ -165,7 +165,6 @@ class TestTasks:
 
     def test_tasks_registered(self):
         """Both tasks are registered."""
-        tasks = get_tasks()
-        assert "gsm8k_llama" in tasks
-        assert "chartqa" in tasks
-        assert len(tasks) == 2
+        assert "gsm8k_llama" in TASKS
+        assert "chartqa" in TASKS
+        assert len(TASKS) == 2

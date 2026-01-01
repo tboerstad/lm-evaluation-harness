@@ -29,3 +29,7 @@ ruff check . --fix
 ruff format .
 pytest
 ```
+
+## Code Style
+
+- **No local imports**: Use module-level imports only. No imports inside functions or methods.

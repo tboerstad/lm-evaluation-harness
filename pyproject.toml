@@ -30,7 +30,7 @@ tinyeval = "tinyeval:main"
 dev = ["pytest", "pytest-cov", "ruff", "pre-commit"]
 
 [tool.setuptools]
-py-modules = ["tinyeval"]
+py-modules = ["tinyeval", "core"]
 packages = ["tasks"]
 
 [tool.ruff.lint]
@@ -39,4 +39,4 @@ ignore = ["E501"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
-known-first-party = ["tinyeval"]
+known-first-party = ["tinyeval", "core", "tasks"]

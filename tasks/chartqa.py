@@ -7,7 +7,7 @@ import time
 
 import datasets
 
-from tinyeval import APIConfig, _normalize, complete
+from core import APIConfig, _normalize, complete
 
 
 def _format_chartqa_prompt(query: str) -> str:

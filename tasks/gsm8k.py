@@ -7,7 +7,7 @@ import time
 
 import datasets
 
-from tinyeval import APIConfig, _normalize, complete
+from core import APIConfig, _normalize, complete
 
 GSM8K_FEWSHOT = [
     (
