@@ -6,7 +6,7 @@ import re
 
 import datasets
 
-from core import APIConfig, _normalize, run_task
+from tinyeval import APIConfig, _normalize, run_task
 
 GSM8K_FEWSHOT = [
     (

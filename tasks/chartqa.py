@@ -6,7 +6,7 @@ import re
 
 import datasets
 
-from core import APIConfig, _normalize, run_task
+from tinyeval import APIConfig, _normalize, run_task
 
 # Pre-compiled regex patterns for _relaxed_match
 _FINAL_ANSWER_RE = re.compile(r"FINAL ANSWER:\s*(.+?)(?:\n|$)", re.IGNORECASE)

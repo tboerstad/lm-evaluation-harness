@@ -6,12 +6,13 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from core import (
+from tinyeval import (
     APIConfig,
     _build_vision_message,
     _encode_image,
     _normalize,
     complete,
+    run_task,
 )
 from tasks import TASKS
 from tasks.chartqa import _format_chartqa_prompt, _relaxed_match
@@ -130,7 +131,7 @@ class TestHTTPClient:
         config = APIConfig(url="http://test.com/v1/chat/completions", model="gpt-4")
         response = {"choices": [{"message": {"content": "The answer is 42"}}]}
 
-        with patch("core.aiohttp.ClientSession") as mock_session:
+        with patch("tinyeval.aiohttp.ClientSession") as mock_session:
             mock_session.return_value.__aenter__.return_value = _make_mock_session(
                 response
             )
@@ -145,7 +146,7 @@ class TestHTTPClient:
         )
         response = {"choices": [{"message": {"content": "I see a chart"}}]}
 
-        with patch("core.aiohttp.ClientSession") as mock_session:
+        with patch("tinyeval.aiohttp.ClientSession") as mock_session:
             mock_session.return_value.__aenter__.return_value = _make_mock_session(
                 response
             )
@@ -154,6 +155,28 @@ class TestHTTPClient:
             )
 
         assert responses[0] == "I see a chart"
+
+
+class TestRunTask:
+    """run_task orchestration function."""
+
+    def test_run_task_formats_and_times(self):
+        """run_task formats prompts, calls complete, and returns elapsed time."""
+        config = APIConfig(url="http://test.com/v1/chat/completions", model="gpt-4")
+        docs = [{"q": "What is 1+1?"}, {"q": "What is 2+2?"}]
+        response = {"choices": [{"message": {"content": "answer"}}]}
+
+        with patch("tinyeval.aiohttp.ClientSession") as mock_session:
+            mock_session.return_value.__aenter__.return_value = _make_mock_session(
+                response
+            )
+            responses, elapsed = asyncio.run(
+                run_task("test_task", config, docs, lambda d: d["q"])
+            )
+
+        assert len(responses) == 2
+        assert responses[0] == "answer"
+        assert elapsed >= 0  # Time should be non-negative
 
 
 class TestTasks:
