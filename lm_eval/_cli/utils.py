@@ -63,19 +63,6 @@ def _int_or_none_list_arg_type(
     return items
 
 
-def request_caching_arg_to_dict(cache_requests: str | None) -> dict[str, bool]:
-    """Convert a request caching argument to a dictionary."""
-    if cache_requests is None:
-        return {}
-    request_caching_args = {
-        "cache_requests": cache_requests in {"true", "refresh"},
-        "rewrite_requests_cache": cache_requests == "refresh",
-        "delete_requests_cache": cache_requests == "delete",
-    }
-
-    return request_caching_args
-
-
 def check_argument_types(parser: argparse.ArgumentParser) -> None:
     """
     Check to make sure all CLI args are typed, raises error if not

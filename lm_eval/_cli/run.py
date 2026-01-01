@@ -10,7 +10,6 @@ from lm_eval._cli.utils import (
     MergeDictAction,
     SplitArgs,
     _int_or_none_list_arg_type,
-    request_caching_arg_to_dict,
     try_parse_json,
 )
 
@@ -108,14 +107,6 @@ class Run(SubCommand):
             metavar="<limit>",
             help="Limit examples per task (integer count or fraction)",
         )
-        model_group.add_argument(
-            "--use_cache",
-            "-c",
-            type=str,
-            default=None,
-            metavar="<path>",
-            help="Path to cache model responses (skips repeated inference)",
-        )
 
         # Evaluation Settings
         eval_group = self._parser.add_argument_group("evaluation settings")
@@ -191,18 +182,9 @@ class Run(SubCommand):
             help="JSON mapping task names to sample indices, e.g. '{\"task1\": [0,1,2]}'. Incompatible with --limit.",
         )
 
-        # Caching and Performance
-        cache_group = self._parser.add_argument_group(
-            "caching and performance (see also: --use_cache)"
-        )
-        cache_group.add_argument(
-            "--cache_requests",
-            type=request_caching_arg_to_dict,
-            default=None,
-            choices=["true", "refresh", "delete"],
-            help="Cache preprocessed prompts (true|refresh|delete)",
-        )
-        cache_group.add_argument(
+        # Validation
+        validation_group = self._parser.add_argument_group("validation")
+        validation_group.add_argument(
             "--check_integrity",
             action="store_true",
             default=argparse.SUPPRESS,
@@ -364,14 +346,6 @@ class Run(SubCommand):
             batch_size=cfg.batch_size,
             max_batch_size=cfg.max_batch_size,
             device=cfg.device,
-            use_cache=cfg.use_cache,
-            cache_requests=cfg.cache_requests.get("cache_requests", False),
-            rewrite_requests_cache=cfg.cache_requests.get(
-                "rewrite_requests_cache", False
-            ),
-            delete_requests_cache=cfg.cache_requests.get(
-                "delete_requests_cache", False
-            ),
             limit=cfg.limit,
             samples=cfg.samples,
             check_integrity=cfg.check_integrity,

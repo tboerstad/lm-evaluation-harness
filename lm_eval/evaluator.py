@@ -15,7 +15,6 @@ import lm_eval.api.metrics
 import lm_eval.api.model
 import lm_eval.api.registry
 import lm_eval.api.task
-from lm_eval.caching.cache import delete_cache
 from lm_eval.evaluator_utils import (
     consolidate_group_results,
     consolidate_results,
@@ -57,10 +56,6 @@ def simple_evaluate(
     batch_size: int | str | None = None,
     max_batch_size: int | None = None,
     device: str | None = None,
-    use_cache: str | None = None,
-    cache_requests: bool = False,
-    rewrite_requests_cache: bool = False,
-    delete_requests_cache: bool = False,
     limit: int | float | None = None,
     samples: dict | None = None,
     bootstrap_iters: int = 100000,
@@ -99,14 +94,6 @@ def simple_evaluate(
             batch size detection.
         device (str | None): PyTorch device (e.g. "cpu" or "cuda:0") for running
             models.
-        use_cache (str | None): A path to a sqlite db file for caching model
-            responses. `None` if not caching.
-        cache_requests (bool): Speed up evaluation by caching the building of
-            dataset requests. `None` if not caching.
-        rewrite_requests_cache (bool): Rewrites all the request cache if set to
-            `True`. `None` if not desired.
-        delete_requests_cache (bool): Deletes all the request cache if set to
-            `True`. `None` if not desired.
         limit (int | float | None): Limit the number of examples per task (only
             use this for testing). If <1, limit is a percentage of the total
             number of examples.
@@ -185,10 +172,6 @@ def simple_evaluate(
             )
         )
 
-    if delete_requests_cache:
-        eval_logger.info("Deleting requests cache...")
-        delete_cache()
-
     seed_message = []
     if random_seed is not None:
         # See https://github.com/EleutherAI/lm-evaluation-harness/pull/1412
@@ -263,18 +246,6 @@ def simple_evaluate(
             )
         eval_logger.info("Using pre-initialized model")
         lm = model
-
-    if use_cache is not None:
-        eval_logger.info(f"Using cache at {use_cache + '_rank' + str(lm.rank) + '.db'}")
-        lm = lm_eval.api.model.CachingLM(
-            lm,
-            use_cache
-            # each rank receives a different cache db.
-            # necessary to avoid multiple writes to cache at once
-            + "_rank"
-            + str(lm.rank)
-            + ".db",
-        )
 
     if task_manager is None:
         metadata = (
@@ -365,8 +336,6 @@ def simple_evaluate(
         task_dict=task_dict,
         limit=limit,
         samples=samples,
-        cache_requests=cache_requests,
-        rewrite_requests_cache=rewrite_requests_cache,
         bootstrap_iters=bootstrap_iters,
         write_out=write_out,
         log_samples=True if predict_only else log_samples,
@@ -403,7 +372,6 @@ def simple_evaluate(
                     list(lm.batch_sizes.values()) if hasattr(lm, "batch_sizes") else []  # type: ignore
                 ),
                 "device": device,
-                "use_cache": use_cache,
                 "limit": limit,
                 "bootstrap_iters": bootstrap_iters,
                 "gen_kwargs": gen_kwargs,
@@ -428,8 +396,6 @@ def evaluate(
     task_dict,
     limit: int | None = None,
     samples: dict | None = None,
-    cache_requests: bool = False,
-    rewrite_requests_cache: bool = False,
     bootstrap_iters: int | None = 100000,
     write_out: bool = False,
     log_samples: bool = True,
@@ -450,10 +416,6 @@ def evaluate(
         samples (dict | None): Dictionary indicating which examples should be
             tested in each task, e.g.,
             {"mmlu_astronomy": [0, 3, 6], "mmlu_anatomy": [1, 4, 7, 10]}.
-        cache_requests (bool): Speed up evaluation by caching the building of
-            dataset requests.
-        rewrite_requests_cache (bool): Rewrites all the request cache if set to
-            `True`.
         bootstrap_iters (int | None): Number of iterations for bootstrap
             statistics, used when calculating stderr. Set to 0 for skipping all
             stderr calculations.
@@ -535,8 +497,6 @@ def evaluate(
             else samples,
             rank=lm.rank,
             world_size=lm.world_size,
-            cache_requests=cache_requests,
-            rewrite_requests_cache=rewrite_requests_cache,
             system_instruction=system_instruction,
             apply_chat_template=bool(apply_chat_template),
             fewshot_as_multiturn=fewshot_as_multiturn,
@@ -724,13 +684,3 @@ def evaluate(
 
     else:
         return None
-
-
-def request_caching_arg_to_dict(cache_requests: str) -> dict:
-    request_caching_args = {
-        "cache_requests": cache_requests in {"true", "refresh"},
-        "rewrite_requests_cache": cache_requests == "refresh",
-        "delete_requests_cache": cache_requests == "delete",
-    }
-
-    return request_caching_args

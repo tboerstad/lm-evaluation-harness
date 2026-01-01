@@ -90,16 +90,6 @@ class EvaluatorConfig:
         metadata={"help": "dict, JSON string or path to JSON file with doc indices"},
     )
 
-    # Caching
-    use_cache: str | None = field(
-        default=None,
-        metadata={"help": "Path to sqlite db file for caching model outputs"},
-    )
-    cache_requests: dict = field(
-        default_factory=dict,
-        metadata={"help": "Cache dataset requests: true/refresh/delete"},
-    )
-
     # Output and logging flags
     check_integrity: bool = field(
         default=False, metadata={"help": "Run test suite for tasks"}
