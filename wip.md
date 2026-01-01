@@ -320,7 +320,7 @@ Simplified `lm_eval_mini.py` to ignore splits completely - loads all available d
 
 Added single-line documentation for all dataclass fields in `lm_eval_mini.py`:
 
-1. **TaskConfig** - 14 fields documented:
+1. **TaskConfig** - 12 fields documented:
    - `task`: Unique identifier for the task
    - `dataset_path`: HuggingFace dataset path or local directory
    - `dataset_name`: Dataset configuration/subset name
@@ -333,8 +333,6 @@ Added single-line documentation for all dataclass fields in `lm_eval_mini.py`:
    - `generation_kwargs`: API generation params (temperature, max_tokens, until)
    - `metric_list`: Metrics to compute
    - `filter_list`: Post-processing filters for answer extraction
-   - `process_docs`: Optional preprocessing function
-   - `metadata`: Additional task metadata
 
 2. **Instance** - 7 fields documented:
    - `doc`: Original document from the dataset
@@ -345,11 +343,10 @@ Added single-line documentation for all dataclass fields in `lm_eval_mini.py`:
    - `generation_kwargs`: Per-instance generation parameters
    - `response`: Model-generated response (populated after API call)
 
-3. **EvalResult** - 4 fields documented:
+3. **EvalResult** - 3 fields documented:
    - `task`: Name of the evaluated task
    - `metrics`: Computed metric scores
    - `num_samples`: Total evaluated samples
-   - `samples`: Optional per-sample details for debugging
 
 4. **APIConfig** - 9 fields documented:
    - `base_url`: Full URL to chat completions endpoint
