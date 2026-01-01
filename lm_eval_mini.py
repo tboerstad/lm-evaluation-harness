@@ -551,13 +551,24 @@ class LocalCompletionsAPI:
 # Main Evaluation Pipeline
 # ============================================================================
 
+def download_dataset(dataset_path: str, dataset_name: str | None = None) -> None:
+    """Pre-download and cache dataset. Call before timed evaluation."""
+    log.info(f"Pre-downloading: {dataset_path}")
+    datasets.load_dataset(path=dataset_path, name=dataset_name)
+
+
 def load_all_docs(dataset_path: str, dataset_name: str | None, limit: int | None = None) -> list[dict]:
-    """Load all splits from dataset concatenated, optionally limited to first N docs."""
+    """Load docs from dataset. Streams if limit to avoid full download; loads all splits otherwise."""
+    if limit:
+        for split in ["test", "validation", "train"]:
+            try:
+                return list(datasets.load_dataset(dataset_path, dataset_name, split=split, streaming=True).take(limit))
+            except ValueError:
+                continue
+        raise ValueError(f"No valid split found in {dataset_path}")
+
     dataset_dict = datasets.load_dataset(path=dataset_path, name=dataset_name)
-    all_docs = []
-    for split in dataset_dict:
-        all_docs.extend(list(dataset_dict[split]))
-    return all_docs[:limit] if limit else all_docs
+    return [doc for split in dataset_dict for doc in dataset_dict[split]]
 
 
 async def evaluate_task(
