@@ -19,6 +19,7 @@ import logging
 import random
 import re
 import string
+import time
 from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
@@ -47,21 +48,21 @@ class TaskConfig:
     intentional - the mini harness is for relative comparisons between inference
     frameworks, not for train/val separation.
     """
-    task: str
-    dataset_path: str
-    dataset_name: str | None = None
-    num_fewshot: int = 0
-    output_type: OutputType = "generate_until"
-    doc_to_text: str | None = None
-    doc_to_target: str | None = None
-    doc_to_image: list[str] | str | None = None  # Field(s) containing images
-    target_delimiter: str = " "
-    fewshot_delimiter: str = "\n\n"
-    generation_kwargs: dict[str, Any] = field(default_factory=dict)
-    metric_list: list[dict[str, Any]] = field(default_factory=list)
-    filter_list: list[dict[str, Any]] | None = None
-    process_docs: Callable[[Any], Any] | None = None
-    metadata: dict[str, Any] | None = None
+    task: str  # Unique identifier for the task (e.g., "gsm8k", "chartqa")
+    dataset_path: str  # HuggingFace dataset path or local directory
+    dataset_name: str | None = None  # Dataset configuration/subset name (if applicable)
+    num_fewshot: int = 0  # Number of few-shot examples to prepend to each prompt
+    output_type: OutputType = "generate_until"  # Generation mode (only "generate_until" supported)
+    doc_to_text: str | None = None  # Jinja2 template to convert document to input prompt
+    doc_to_target: str | None = None  # Jinja2 template or field name for the expected answer
+    doc_to_image: list[str] | str | None = None  # Document field(s) containing images for multimodal tasks
+    target_delimiter: str = " "  # Separator between prompt and target in few-shot examples
+    fewshot_delimiter: str = "\n\n"  # Separator between few-shot examples
+    generation_kwargs: dict[str, Any] = field(default_factory=dict)  # API generation params (temperature, max_tokens, until)
+    metric_list: list[dict[str, Any]] = field(default_factory=list)  # Metrics to compute (exact_match, relaxed_accuracy, etc.)
+    filter_list: list[dict[str, Any]] | None = None  # Post-processing filters to extract answers from responses
+    process_docs: Callable[[Any], Any] | None = None  # Optional function to preprocess documents
+    metadata: dict[str, Any] | None = None  # Additional task metadata (version, description, etc.)
 
     @classmethod
     def from_yaml(cls, path: Path) -> TaskConfig:
@@ -93,22 +94,22 @@ class TaskConfig:
 @dataclass
 class Instance:
     """Single evaluation instance: prompt, target, optional images, and response."""
-    doc: dict[str, Any]
-    doc_id: int
-    prompt: str
-    target: str | list[str]
-    images: list[Any] = field(default_factory=list)  # PIL Images or base64 strings
-    generation_kwargs: dict[str, Any] = field(default_factory=dict)
-    response: str | None = None
+    doc: dict[str, Any]  # Original document from the dataset
+    doc_id: int  # Index of this document in the dataset
+    prompt: str  # Rendered prompt text (including few-shot context if any)
+    target: str | list[str]  # Expected answer(s) for evaluation
+    images: list[Any] = field(default_factory=list)  # PIL Images or base64 strings for multimodal tasks
+    generation_kwargs: dict[str, Any] = field(default_factory=dict)  # Per-instance generation parameters
+    response: str | None = None  # Model-generated response (populated after API call)
 
 
 @dataclass
 class EvalResult:
     """Evaluation results: task name, computed metrics, sample count."""
-    task: str
-    metrics: dict[str, float]
-    num_samples: int
-    samples: list[dict[str, Any]] | None = None
+    task: str  # Name of the evaluated task
+    metrics: dict[str, float]  # Computed metric scores (e.g., {"exact_match": 0.85})
+    num_samples: int  # Total number of evaluated samples
+    samples: list[dict[str, Any]] | None = None  # Optional per-sample details for debugging
 
 
 # ============================================================================
@@ -230,15 +231,15 @@ def build_instances(
 @dataclass
 class APIConfig:
     """OpenAI-compatible API configuration."""
-    base_url: str
-    model: str
-    api_key: str = ""
-    max_tokens: int = 512
-    temperature: float = 0.0
-    seed: int = 1234
-    num_concurrent: int = 8
-    timeout: int = 300
-    max_retries: int = 3
+    base_url: str  # Full URL to the chat completions endpoint (e.g., "http://localhost:8000/v1/chat/completions")
+    model: str  # Model name to pass in API requests
+    api_key: str = ""  # Bearer token for Authorization header (empty for local APIs)
+    max_tokens: int = 512  # Default maximum tokens to generate per request
+    temperature: float = 0.0  # Sampling temperature (0.0 = deterministic)
+    seed: int = 1234  # Random seed for reproducible generation
+    num_concurrent: int = 8  # Maximum number of concurrent HTTP requests
+    timeout: int = 300  # Request timeout in seconds
+    max_retries: int = 3  # Number of retry attempts on request failure
 
 
 def handle_stop_sequences(until: list[str] | str | None) -> list[str]:
@@ -574,8 +575,8 @@ def load_all_docs(dataset_path: str, dataset_name: str | None, limit: int | None
 async def evaluate_task(
     task_path: Path, api_config: APIConfig, num_fewshot: int | None = None,
     limit: int | None = None, seed: int = 42,
-) -> EvalResult:
-    """Load task config, build instances, run generation, compute metrics."""
+) -> tuple[EvalResult, float]:
+    """Load task config, build instances, run generation, compute metrics. Returns (result, eval_time)."""
     config = TaskConfig.from_yaml(task_path)
     log.info(f"Evaluating task: {config.task} (multimodal: {config.is_multimodal})")
     if num_fewshot is not None:
@@ -588,26 +589,31 @@ async def evaluate_task(
     instances = build_instances(config, docs, fewshot_context)
     log.info(f"Built {len(instances)} instances")
 
+    start_time = time.perf_counter()
     instances = await run_generation(instances, api_config, is_multimodal=config.is_multimodal)
-    return EvalResult(task=config.task, metrics=compute_metrics(instances, config), num_samples=len(instances))
+    eval_time = time.perf_counter() - start_time
+
+    return EvalResult(task=config.task, metrics=compute_metrics(instances, config), num_samples=len(instances)), eval_time
 
 
 async def evaluate_tasks(
     task_paths: list[Path], api_config: APIConfig, num_fewshot: int | None = None,
     limit: int | None = None, seed: int = 42,
-) -> dict[str, EvalResult]:
-    """Evaluate multiple tasks sequentially, logging results."""
+) -> tuple[dict[str, tuple[EvalResult, float]], float]:
+    """Evaluate multiple tasks sequentially, returning (result, time) per task and total time."""
     results = {}
+    total_eval_time = 0.0
     for path in task_paths:
         try:
-            result = await evaluate_task(path, api_config, num_fewshot, limit, seed)
-            results[result.task] = result
-            log.info(f"Task {result.task}: {result.metrics}")
+            result, eval_time = await evaluate_task(path, api_config, num_fewshot, limit, seed)
+            results[result.task] = (result, eval_time)
+            total_eval_time += eval_time
+            log.info(f"Task {result.task}: {result.metrics} ({eval_time:.2f}s)")
         except Exception as e:
             log.error(f"Error evaluating {path}: {e}")
             import traceback
             traceback.print_exc()
-    return results
+    return results, total_eval_time
 
 
 def find_task_configs(tasks_dir: Path, task_names: list[str]) -> list[Path]:
@@ -651,11 +657,15 @@ def main() -> int:
         return 1
 
     api_config = APIConfig(base_url=args.base_url, model=args.model, api_key=args.api_key, num_concurrent=args.num_concurrent)
-    results = asyncio.run(evaluate_tasks(task_paths, api_config, args.num_fewshot, args.limit, args.seed))
+    results, total_eval_time = asyncio.run(evaluate_tasks(task_paths, api_config, args.num_fewshot, args.limit, args.seed))
 
     output = {
-        "results": {name: {"metrics": r.metrics, "num_samples": r.num_samples} for name, r in results.items()},
+        "results": {
+            name: {"metrics": r.metrics, "num_samples": r.num_samples, "evaluation_time_seconds": str(t)}
+            for name, (r, t) in results.items()
+        },
         "config": {"model": args.model, "num_fewshot": args.num_fewshot, "limit": args.limit},
+        "total_evaluation_time_seconds": str(total_eval_time),
     }
     print(json.dumps(output, indent=2))
     if args.output:
