@@ -109,6 +109,49 @@ Added comprehensive tests for CLI HTTP request handling (`tests/test_cli_http.py
    - Custom model names passed correctly
    - Batch size handling
 
+### Phase 8: Remove Request Caching
+Removed all caching functionality from the codebase:
+
+1. **Deleted files:**
+   - `lm_eval/caching/` directory (`__init__.py`, `cache.py`)
+   - `tests/test_requests_caching.py`
+   - `scripts/requests_caching.py`
+
+2. **Removed from `lm_eval/api/model.py`:**
+   - `CachingLM` class (SQLite-based response caching wrapper)
+   - `CacheHook` class
+   - `hash_args()` function
+   - `sqlitedict` import
+
+3. **Removed from `lm_eval/api/task.py`:**
+   - `cache_requests` and `rewrite_requests_cache` parameters from `build_all_requests()`
+   - Cache key generation and loading/saving logic
+   - Import of `load_from_cache`, `save_to_cache`
+
+4. **Removed from CLI (`lm_eval/_cli/run.py`):**
+   - `--use_cache` / `-c` argument
+   - `--cache_requests` argument (true/refresh/delete)
+   - "caching and performance" argument group
+
+5. **Removed from `lm_eval/_cli/utils.py`:**
+   - `request_caching_arg_to_dict()` function
+
+6. **Removed from `lm_eval/config/evaluate_config.py`:**
+   - `use_cache` field
+   - `cache_requests` field
+
+7. **Removed from `lm_eval/evaluator.py`:**
+   - `use_cache`, `cache_requests`, `rewrite_requests_cache`, `delete_requests_cache` parameters
+   - `CachingLM` wrapper instantiation
+   - `delete_cache()` call
+   - `request_caching_arg_to_dict()` function
+
+8. **Updated `pyproject.toml`:**
+   - Removed `sqlitedict` dependency
+
+9. **Updated `tests/test_cli_subcommands.py`:**
+   - Removed `request_caching_arg_to_dict` import and tests
+
 ## Current State
 
 ### Available Models
@@ -137,6 +180,7 @@ Added comprehensive tests for CLI HTTP request handling (`tests/test_cli_http.py
 - ~8,000 lines from model backends
 - Significant reduction in evaluator.py (removed distributed code)
 - ~1,200 lines from optional integrations (wandb, zeno, examples)
+- ~570 lines from caching functionality
 
 ## How to Test
 ```bash
@@ -160,6 +204,7 @@ If something is broken, the original code is available in git history before the
 ## Known Limitations
 - No local model inference (by design)
 - No multi-GPU support (by design)
+- No request/response caching (removed)
 - `datasets` library still required for loading benchmarks
 - Some task-specific utils still have torch/transformers imports (in `lm_eval/tasks/`)
 - No W&B or Zeno result visualization (removed)

@@ -11,7 +11,6 @@ from lm_eval._cli.utils import (
     MergeDictAction,
     _int_or_none_list_arg_type,
     check_argument_types,
-    request_caching_arg_to_dict,
     try_parse_json,
 )
 from lm_eval._cli.validate import Validate
@@ -689,38 +688,6 @@ class TestCLIUtils:
         """Test _int_or_none_list_arg_type with too many values."""
         with pytest.raises(ValueError):
             _int_or_none_list_arg_type(3, 4, "0,1,2,3", "10,20,30,40,50")
-
-    def test_request_caching_arg_to_dict_none(self):
-        """Test request_caching_arg_to_dict with None."""
-        result = request_caching_arg_to_dict(None)
-        assert result == {}
-
-    def test_request_caching_arg_to_dict_true(self):
-        """Test request_caching_arg_to_dict with 'true'."""
-        result = request_caching_arg_to_dict("true")
-        assert result == {
-            "cache_requests": True,
-            "rewrite_requests_cache": False,
-            "delete_requests_cache": False,
-        }
-
-    def test_request_caching_arg_to_dict_refresh(self):
-        """Test request_caching_arg_to_dict with 'refresh'."""
-        result = request_caching_arg_to_dict("refresh")
-        assert result == {
-            "cache_requests": True,
-            "rewrite_requests_cache": True,
-            "delete_requests_cache": False,
-        }
-
-    def test_request_caching_arg_to_dict_delete(self):
-        """Test request_caching_arg_to_dict with 'delete'."""
-        result = request_caching_arg_to_dict("delete")
-        assert result == {
-            "cache_requests": False,
-            "rewrite_requests_cache": False,
-            "delete_requests_cache": True,
-        }
 
     def test_check_argument_types_raises_on_untyped(self):
         """Test check_argument_types raises error for untyped arguments."""
