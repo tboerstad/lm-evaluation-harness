@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import re
-import time
 
 import datasets
 
-from core import APIConfig, _normalize, complete
+from core import APIConfig, _normalize, run_task
 
 GSM8K_FEWSHOT = [
     (
@@ -80,10 +79,15 @@ def _parse_target(answer: str) -> str:
 
 def _extract_gsm8k_answer(response: str) -> str:
     """Extract numeric answer from GSM8K response."""
+    # Check for explicit template first
     if match := re.search(rf"The final answer is ({_NUM_PATTERN})", response):
         return match.group(1)
-    if match := re.search(rf"({_NUM_PATTERN})", response):
-        return match.group(1)
+
+    # Fallback: Find ALL numbers and return the LAST one
+    matches = re.findall(rf"({_NUM_PATTERN})", response)
+    if matches:
+        return matches[-1]
+
     return response
 
 
@@ -96,16 +100,16 @@ async def eval_gsm8k(config: APIConfig, limit: int | None = None) -> dict:
     # Load
     ds = datasets.load_dataset("gsm8k", "main", split="test", streaming=True)
     docs = list(ds.take(limit) if limit else ds)
-
-    # Format prompts and extract targets
-    prompts = [_format_gsm8k_prompt(d["question"]) for d in docs]
     targets = [_parse_target(d["answer"]) for d in docs]
 
     # Run inference
-    print(f"Evaluating: gsm8k_llama ({len(docs)} samples)")
-    t0 = time.perf_counter()
-    responses = await complete(prompts, config, max_tokens=512, stop=GSM8K_STOP)
-    elapsed = time.perf_counter() - t0
+    responses, elapsed = await run_task(
+        "gsm8k_llama",
+        config,
+        docs,
+        lambda d: _format_gsm8k_prompt(d["question"]),
+        stop=GSM8K_STOP,
+    )
 
     # Score
     correct = sum(

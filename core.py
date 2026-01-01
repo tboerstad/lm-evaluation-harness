@@ -5,16 +5,14 @@ from __future__ import annotations
 import asyncio
 import base64
 import re
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Any
 
 import aiohttp
-
-try:
-    from PIL import Image
-except ImportError:
-    Image = None
+from PIL import Image
 
 # Pre-compiled regex patterns for _normalize
 _NORMALIZE_CURRENCY_RE = re.compile(r"[$,]")
@@ -143,14 +141,18 @@ def _build_vision_message(text: str, images: list) -> list[dict]:
 
 def _encode_image(image: Any) -> str:
     """Encode PIL image to base64, or pass through string."""
-    if Image and isinstance(image, Image.Image):
+    if isinstance(image, str):
+        assert not image.startswith("http"), "Remote image URLs are not supported."
+        return image
+
+    if isinstance(image, Image.Image):
         # Convert to RGB if needed to avoid save errors with CMYK/palette modes
         if image.mode not in ("RGB", "L"):
             image = image.convert("RGB")
         buf = BytesIO()
         image.save(buf, format="PNG")
         return base64.b64encode(buf.getvalue()).decode()
-    return image if isinstance(image, str) else ""
+    return ""
 
 
 def _normalize(text: str) -> str:
@@ -159,3 +161,22 @@ def _normalize(text: str) -> str:
     text = _NORMALIZE_THOUGHT_RE.sub("", text)
     text = _NORMALIZE_END_RE.sub("", text)
     return text.lower().strip()
+
+
+async def run_task(
+    task_name: str,
+    config: APIConfig,
+    docs: list,
+    prompt_fn: Callable,
+    max_tokens: int = 512,
+    stop: list[str] | None = None,
+) -> tuple[list[str], float]:
+    """Shared execution loop: Format -> Timer -> Request -> Timer."""
+    prompts = [prompt_fn(d) for d in docs]
+
+    print(f"Evaluating: {task_name} ({len(docs)} samples)")
+    t0 = time.perf_counter()
+    responses = await complete(prompts, config, max_tokens=max_tokens, stop=stop)
+    elapsed = time.perf_counter() - t0
+
+    return responses, elapsed

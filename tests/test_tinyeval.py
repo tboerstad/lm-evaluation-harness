@@ -42,19 +42,22 @@ class TestImageHandling:
     """Image encoding and multimodal message building."""
 
     def test_encode_pil_image_and_string_passthrough(self):
-        """PIL images encode to base64; strings pass through unchanged."""
-        try:
-            from PIL import Image
+        """PIL images encode to base64; local strings pass through; URLs rejected."""
+        from PIL import Image
 
-            img = Image.new("RGB", (10, 10), color="red")
-            b64 = _encode_image(img)
-            assert base64.b64decode(b64)  # Valid base64
-        except ImportError:
-            pytest.skip("PIL not available")
+        img = Image.new("RGB", (10, 10), color="red")
+        b64 = _encode_image(img)
+        assert base64.b64decode(b64)  # Valid base64
 
-        # Strings pass through
-        url = "https://example.com/image.png"
-        assert _encode_image(url) == url
+        # Local string paths pass through
+        local_path = "/path/to/image.png"
+        assert _encode_image(local_path) == local_path
+
+        # Remote URLs are rejected
+        with pytest.raises(AssertionError, match="Remote image URLs are not supported"):
+            _encode_image("https://example.com/image.png")
+        with pytest.raises(AssertionError, match="Remote image URLs are not supported"):
+            _encode_image("http://example.com/image.png")
 
     def test_vision_message_structure(self):
         """Vision API message: images first, text second, <image> placeholder removed."""
