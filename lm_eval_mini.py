@@ -64,8 +64,18 @@ class TaskConfig:
     @classmethod
     def from_yaml(cls, path: Path) -> TaskConfig:
         """Load a task config from a YAML file."""
+        # Create a custom loader that handles !function tags
+        class FunctionTagLoader(yaml.SafeLoader):
+            pass
+
+        def function_constructor(loader, node):
+            """Convert !function tags to string representation."""
+            return loader.construct_scalar(node)
+
+        FunctionTagLoader.add_constructor("!function", function_constructor)
+
         with open(path) as f:
-            data = yaml.safe_load(f)
+            data = yaml.load(f, Loader=FunctionTagLoader)
 
         # Handle includes
         if "include" in data:
