@@ -295,10 +295,32 @@ Added comprehensive integration tests for ChartQA and fixed YAML loading:
    Total: 36 tests passing
    ```
 
+### Phase 11: Remove Split Fields Entirely
+
+Simplified `lm_eval_mini.py` to ignore splits completely - loads all available data from the dataset. This is intentional - the mini harness is for relative comparisons between inference frameworks, not for train/val separation.
+
+1. **Simplified `TaskConfig`:**
+   - Removed: `test_split`, `training_split`, `fewshot_split`, `split`
+   - No split configuration at all
+
+2. **Added `load_all_docs()`:**
+   - Loads all splits from dataset and concatenates them
+   - Applies `[:limit]` slice if limit specified
+
+3. **Updated `get_fewshot_examples()`:**
+   - Now takes a `docs` list directly instead of dataset + config
+   - Samples few-shot examples from loaded data
+   - Added optional `exclude_indices` parameter
+
+4. **Test updates:**
+   - Updated seed reproducibility tests for new function signature
+   - Added `test_fewshot_exclude_indices` test
+
 ## Known Limitations
 - No local model inference (by design)
 - No multi-GPU support (by design)
 - No request/response caching (removed)
+- No train/val/test split distinction (by design - for inference framework comparisons)
 - `datasets` library still required for loading benchmarks
 - Some task-specific utils still have torch/transformers imports (in `lm_eval/tasks/`)
 - No W&B or Zeno result visualization (removed)
