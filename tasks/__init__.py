@@ -1,8 +1,19 @@
-"""Task registry for tinyeval."""
+"""Task registry for tinyeval.
 
-from tasks.chartqa import eval_chartqa
-from tasks.gsm8k import eval_gsm8k
+TASKS maps task names to task modules. Each module provides:
+- NAME: str - task identifier
+- STOP: list[str] | None - stop sequences
+- load(limit) -> list - load dataset
+- prompt(doc) -> str | tuple[str, list] - format prompt
+- score(responses, docs) -> dict - compute metrics
+"""
 
-TASKS = {"gsm8k_llama": eval_gsm8k, "chartqa": eval_chartqa}
+from tasks import chartqa, gsm8k
 
-__all__ = ["TASKS", "eval_gsm8k", "eval_chartqa"]
+# Map task names to modules
+TASKS = {
+    gsm8k.NAME: gsm8k,
+    chartqa.NAME: chartqa,
+}
+
+__all__ = ["TASKS", "gsm8k", "chartqa"]

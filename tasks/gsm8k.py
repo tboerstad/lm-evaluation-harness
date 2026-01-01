@@ -1,4 +1,8 @@
-"""GSM8K task - grade school math with chain of thought."""
+"""GSM8K task - pure logic only.
+
+This module provides data loading, prompt formatting, and scoring for GSM8K.
+It doesn't run anything - the execution loop is in tinyeval.py.
+"""
 
 from __future__ import annotations
 
@@ -6,9 +10,20 @@ import re
 
 import datasets
 
-from core import APIConfig, _normalize, run_task
+# Task metadata
+NAME = "gsm8k_llama"
 
-GSM8K_FEWSHOT = [
+# Stop sequences
+STOP = [
+    "<|eot_id|>",
+    "<|start_header_id|>user<|end_header_id|>",
+    "Q:",
+    "</s>",
+    "<|im_end|>",
+]
+
+# Few-shot examples
+_FEWSHOT = [
     (
         "There are 15 trees in the grove. Grove workers will plant trees in the grove today. After they are done, there will be 21 trees. How many trees did the grove workers plant today?",
         "There are 15 trees originally. Then there were 21 trees after some more were planted. So there must have been 21 - 15 = 6. The final answer is 6",
@@ -43,30 +58,45 @@ GSM8K_FEWSHOT = [
     ),
 ]
 
-GSM8K_STOP = [
-    "<|eot_id|>",
-    "<|start_header_id|>user<|end_header_id|>",
-    "Q:",
-    "</s>",
-    "<|im_end|>",
-]
-
-
-_GSM8K_TEMPLATE = (
+_TEMPLATE = (
     "Given the following problem, reason and give a final answer to the problem.\n"
     "Problem: {question}\n"
     'Your response should end with "The final answer is [answer]" where [answer] is the response to the problem.'
 )
 
+_NUM_PATTERN = r"-?[$0-9.,]{2,}|-?[0-9]+"
 
-def _format_gsm8k_prompt(question: str) -> str:
-    """Format GSM8K prompt with few-shot examples."""
-    parts = [_GSM8K_TEMPLATE.format(question=q) + f"\n {a}" for q, a in GSM8K_FEWSHOT]
-    parts.append(_GSM8K_TEMPLATE.format(question=question))
+# Pre-compiled regex patterns for normalization
+_NORMALIZE_CURRENCY_RE = re.compile(r"[$,]")
+_NORMALIZE_THOUGHT_RE = re.compile(r"(?s).*#### ")
+_NORMALIZE_END_RE = re.compile(r"\.$")
+
+
+def load(limit: int | None = None) -> list:
+    """Load GSM8K dataset."""
+    ds = datasets.load_dataset("gsm8k", "main", split="test", streaming=True)
+    return list(ds.take(limit) if limit else ds)
+
+
+def prompt(doc: dict) -> str:
+    """Format a single document into a prompt."""
+    parts = [_TEMPLATE.format(question=q) + f"\n {a}" for q, a in _FEWSHOT]
+    parts.append(_TEMPLATE.format(question=doc["question"]))
     return "\n\n".join(parts)
 
 
-_NUM_PATTERN = r"-?[$0-9.,]{2,}|-?[0-9]+"
+def score(responses: list[str], docs: list) -> dict:
+    """Score responses against documents. Returns metrics dict."""
+    targets = [_parse_target(d["answer"]) for d in docs]
+    correct = sum(
+        _normalize(_extract_answer(r)) == _normalize(t)
+        for r, t in zip(responses, targets)
+    )
+    accuracy = correct / len(docs)
+    return {
+        "exact_match": accuracy,
+        "relaxed_accuracy": accuracy,
+    }
 
 
 def _parse_target(answer: str) -> str:
@@ -77,8 +107,8 @@ def _parse_target(answer: str) -> str:
     return parts[-1].strip()
 
 
-def _extract_gsm8k_answer(response: str) -> str:
-    """Extract numeric answer from GSM8K response."""
+def _extract_answer(response: str) -> str:
+    """Extract numeric answer from response."""
     # Check for explicit template first
     if match := re.search(rf"The final answer is ({_NUM_PATTERN})", response):
         return match.group(1)
@@ -91,41 +121,9 @@ def _extract_gsm8k_answer(response: str) -> str:
     return response
 
 
-async def eval_gsm8k(config: APIConfig, limit: int | None = None) -> dict:
-    """
-    Evaluate GSM8K - grade school math with chain of thought.
-
-    Returns dict with exact_match, num_samples, time_seconds.
-    """
-    # Load
-    ds = datasets.load_dataset("gsm8k", "main", split="test", streaming=True)
-    docs = list(ds.take(limit) if limit else ds)
-    targets = [_parse_target(d["answer"]) for d in docs]
-
-    # Run inference
-    responses, elapsed = await run_task(
-        "gsm8k_llama",
-        config,
-        docs,
-        lambda d: _format_gsm8k_prompt(d["question"]),
-        stop=GSM8K_STOP,
-    )
-
-    # Score
-    correct = sum(
-        _normalize(_extract_gsm8k_answer(r)) == _normalize(t)
-        for r, t in zip(responses, targets)
-    )
-
-    metrics = {
-        "exact_match": correct / len(docs),
-        "relaxed_accuracy": correct / len(docs),
-    }
-    print(f"gsm8k_llama: {metrics} ({elapsed:.2f}s)")
-
-    return {
-        "task": "gsm8k_llama",
-        "metrics": metrics,
-        "num_samples": len(docs),
-        "time_seconds": round(elapsed, 2),
-    }
+def _normalize(text: str) -> str:
+    """Normalize text for comparison."""
+    text = _NORMALIZE_CURRENCY_RE.sub("", text)
+    text = _NORMALIZE_THOUGHT_RE.sub("", text)
+    text = _NORMALIZE_END_RE.sub("", text)
+    return text.lower().strip()

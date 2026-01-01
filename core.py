@@ -1,12 +1,10 @@
-"""Core utilities for tinyeval - shared by main module and tasks."""
+"""Core utilities for tinyeval - HTTP client and image handling."""
 
 from __future__ import annotations
 
 import asyncio
 import base64
 import re
-import time
-from collections.abc import Callable
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Any
@@ -161,22 +159,3 @@ def _normalize(text: str) -> str:
     text = _NORMALIZE_THOUGHT_RE.sub("", text)
     text = _NORMALIZE_END_RE.sub("", text)
     return text.lower().strip()
-
-
-async def run_task(
-    task_name: str,
-    config: APIConfig,
-    docs: list,
-    prompt_fn: Callable,
-    max_tokens: int = 512,
-    stop: list[str] | None = None,
-) -> tuple[list[str], float]:
-    """Shared execution loop: Format -> Timer -> Request -> Timer."""
-    prompts = [prompt_fn(d) for d in docs]
-
-    print(f"Evaluating: {task_name} ({len(docs)} samples)")
-    t0 = time.perf_counter()
-    responses = await complete(prompts, config, max_tokens=max_tokens, stop=stop)
-    elapsed = time.perf_counter() - t0
-
-    return responses, elapsed

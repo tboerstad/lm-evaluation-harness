@@ -14,8 +14,8 @@ from core import (
     complete,
 )
 from tasks import TASKS
-from tasks.chartqa import _format_chartqa_prompt, _relaxed_match
-from tasks.gsm8k import _extract_gsm8k_answer, _format_gsm8k_prompt
+from tasks.chartqa import _relaxed_match, prompt as chartqa_prompt
+from tasks.gsm8k import _extract_answer, prompt as gsm8k_prompt
 
 
 def _make_mock_session(response_data: dict):
@@ -99,16 +99,17 @@ class TestGSM8K:
 
     def test_format_prompt(self):
         """GSM8K prompt includes question and few-shot examples."""
-        prompt = _format_gsm8k_prompt("What is 2 + 2?")
-        assert "What is 2 + 2?" in prompt
-        assert "The final answer is" in prompt
-        assert "15 trees" in prompt  # First few-shot example
+        doc = {"question": "What is 2 + 2?"}
+        prompt_text = gsm8k_prompt(doc)
+        assert "What is 2 + 2?" in prompt_text
+        assert "The final answer is" in prompt_text
+        assert "15 trees" in prompt_text  # First few-shot example
 
     def test_extract_answer(self):
         """Extract numeric answer from response."""
-        assert _extract_gsm8k_answer("The final answer is 42") == "42"
-        assert _extract_gsm8k_answer("The final answer is $1,234") == "$1,234"
-        assert _extract_gsm8k_answer("Some text with 42 in it") == "42"
+        assert _extract_answer("The final answer is 42") == "42"
+        assert _extract_answer("The final answer is $1,234") == "$1,234"
+        assert _extract_answer("Some text with 42 in it") == "42"
 
 
 class TestChartQA:
@@ -116,10 +117,12 @@ class TestChartQA:
 
     def test_format_prompt(self):
         """ChartQA prompt includes query and image placeholder."""
-        prompt = _format_chartqa_prompt("What is the total revenue?")
-        assert "What is the total revenue?" in prompt
-        assert "FINAL ANSWER:" in prompt
-        assert "<image>" in prompt
+        doc = {"query": "What is the total revenue?", "image": "fake_image"}
+        text, images = chartqa_prompt(doc)
+        assert "What is the total revenue?" in text
+        assert "FINAL ANSWER:" in text
+        assert "<image>" in text
+        assert images == ["fake_image"]
 
 
 class TestHTTPClient:
@@ -160,7 +163,18 @@ class TestTasks:
     """Task registry."""
 
     def test_tasks_registered(self):
-        """Both tasks are registered."""
+        """Both tasks are registered as modules with required interface."""
         assert "gsm8k_llama" in TASKS
         assert "chartqa" in TASKS
         assert len(TASKS) == 2
+
+        # Each task module should have the required interface
+        for name, task in TASKS.items():
+            assert hasattr(task, "NAME")
+            assert hasattr(task, "STOP")
+            assert hasattr(task, "load")
+            assert hasattr(task, "prompt")
+            assert hasattr(task, "score")
+            assert callable(task.load)
+            assert callable(task.prompt)
+            assert callable(task.score)
