@@ -305,8 +305,7 @@ Simplified `lm_eval_mini.py` to ignore splits completely - loads all available d
 
 2. **Added `load_all_docs()`:**
    - Loads all splits from dataset and concatenates them
-   - With `limit`: streams from first available split (test → validation → train)
-   - Without `limit`: loads entire dataset (all splits combined)
+   - Applies `[:limit]` slice if limit specified
 
 3. **Updated `get_fewshot_examples()`:**
    - Now takes a `docs` list directly instead of dataset + config

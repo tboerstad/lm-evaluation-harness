@@ -552,23 +552,12 @@ class LocalCompletionsAPI:
 # ============================================================================
 
 def load_all_docs(dataset_path: str, dataset_name: str | None, limit: int | None = None) -> list[dict]:
-    """Load all splits from dataset, concatenated. Use streaming if limit specified."""
-    if limit:
-        # Try common split names with streaming
-        for split in ["test", "validation", "train"]:
-            try:
-                stream = datasets.load_dataset(dataset_path, dataset_name, split=split, streaming=True)
-                return list(stream.take(limit))
-            except ValueError:
-                continue
-        raise ValueError(f"No valid split found in {dataset_path}")
-
-    # Load all splits and concatenate
+    """Load all splits from dataset concatenated, optionally limited to first N docs."""
     dataset_dict = datasets.load_dataset(path=dataset_path, name=dataset_name)
     all_docs = []
     for split in dataset_dict:
         all_docs.extend(list(dataset_dict[split]))
-    return all_docs
+    return all_docs[:limit] if limit else all_docs
 
 
 async def evaluate_task(
