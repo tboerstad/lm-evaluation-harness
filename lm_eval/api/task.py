@@ -692,13 +692,8 @@ class ConfigurableTask(Task):
                 kwargs = {
                     key: metric_config[key]
                     for key in metric_config
-                    if key
-                    not in ["metric", "aggregation", "higher_is_better", "hf_evaluate"]
+                    if key not in ["metric", "aggregation", "higher_is_better"]
                 }
-                hf_evaluate_metric = (
-                    "hf_evaluate" in metric_config
-                    and metric_config["hf_evaluate"] is True
-                )
 
                 if self.config.process_results is not None:
                     self._metric_fn_list[metric_name] = None
@@ -709,9 +704,7 @@ class ConfigurableTask(Task):
                     self._metric_fn_list[metric_name] = metric_fn
                     self._metric_fn_kwargs[metric_name] = kwargs
                 else:
-                    self._metric_fn_list[metric_name] = get_metric(
-                        metric_name, hf_evaluate_metric
-                    )
+                    self._metric_fn_list[metric_name] = get_metric(metric_name)
                     self._metric_fn_kwargs[metric_name] = kwargs
 
                 if "aggregation" in metric_config:
