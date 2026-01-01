@@ -128,19 +128,27 @@ class TestHTTPClient:
         response = {"choices": [{"message": {"content": "The answer is 42"}}]}
 
         with patch("core.aiohttp.ClientSession") as mock_session:
-            mock_session.return_value.__aenter__.return_value = _make_mock_session(response)
+            mock_session.return_value.__aenter__.return_value = _make_mock_session(
+                response
+            )
             responses = asyncio.run(complete(["Test prompt"], config))
 
         assert responses[0] == "The answer is 42"
 
     def test_complete_multimodal_prompts(self):
         """complete() handles (text, images) tuples for multimodal."""
-        config = APIConfig(url="http://test.com/v1/chat/completions", model="gpt-4-vision")
+        config = APIConfig(
+            url="http://test.com/v1/chat/completions", model="gpt-4-vision"
+        )
         response = {"choices": [{"message": {"content": "I see a chart"}}]}
 
         with patch("core.aiohttp.ClientSession") as mock_session:
-            mock_session.return_value.__aenter__.return_value = _make_mock_session(response)
-            responses = asyncio.run(complete([("Describe this chart", ["base64img"])], config))
+            mock_session.return_value.__aenter__.return_value = _make_mock_session(
+                response
+            )
+            responses = asyncio.run(
+                complete([("Describe this chart", ["base64img"])], config)
+            )
 
         assert responses[0] == "I see a chart"
 

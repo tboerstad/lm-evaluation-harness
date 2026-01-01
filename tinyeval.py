@@ -59,7 +59,7 @@ def main() -> int:
         seed=args.seed,
     )
 
-    task_names = [t.strip() for t in args.tasks.split(",")]
+    task_names = [t.strip() for t in args.tasks.split(",") if t.strip()]
     output = asyncio.run(evaluate(task_names, config, args.limit))
     output["config"] = {"model": args.model, "limit": args.limit}
 

@@ -2,6 +2,8 @@
 
 Tiny Eval - A minimal harness for evaluating LLMs via OpenAI-compatible APIs.
 
+> **Note:** This tool is designed for **comparing relative accuracy between inference frameworks** (e.g., vLLM vs TGI vs Ollama running the same model). It is not intended for absolute benchmark evaluations or leaderboard submissions. Use it to verify that different serving backends produce consistent results.
+
 ## Features
 
 - **API-only** - works with any OpenAI-compatible endpoint (vLLM, TGI, Ollama, etc.)

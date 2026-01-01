@@ -11,6 +11,16 @@ from typing import Any
 
 import aiohttp
 
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
+
+# Pre-compiled regex patterns for _normalize
+_NORMALIZE_CURRENCY_RE = re.compile(r"[$,]")
+_NORMALIZE_THOUGHT_RE = re.compile(r"(?s).*#### ")
+_NORMALIZE_END_RE = re.compile(r"\.$")
+
 
 @dataclass
 class APIConfig:
@@ -32,7 +42,7 @@ async def _request(
     semaphore: asyncio.Semaphore,
     max_retries: int,
 ) -> str:
-    """Single request with retries. Returns response content or empty string."""
+    """Single request with retries. Raises RuntimeError if all retries fail."""
     for attempt in range(max_retries):
         try:
             async with semaphore, session.post(url, json=payload) as resp:
@@ -44,11 +54,15 @@ async def _request(
                         .get("content", "")
                     )
                 print(f"Request failed (attempt {attempt + 1}): {await resp.text()}")
+        except asyncio.CancelledError:
+            raise  # Allow the program to exit immediately on Ctrl+C
         except Exception as e:
             print(f"Request error (attempt {attempt + 1}): {e}")
         if attempt < max_retries - 1:
             await asyncio.sleep(2**attempt)
-    return ""
+    raise RuntimeError(
+        f"Failed to get response from {url} after {max_retries} attempts"
+    )
 
 
 async def complete(
@@ -129,21 +143,19 @@ def _build_vision_message(text: str, images: list) -> list[dict]:
 
 def _encode_image(image: Any) -> str:
     """Encode PIL image to base64, or pass through string."""
-    try:
-        from PIL import Image
-
-        if isinstance(image, Image.Image):
-            buf = BytesIO()
-            image.save(buf, format="PNG")
-            return base64.b64encode(buf.getvalue()).decode()
-    except ImportError:
-        pass
+    if Image and isinstance(image, Image.Image):
+        # Convert to RGB if needed to avoid save errors with CMYK/palette modes
+        if image.mode not in ("RGB", "L"):
+            image = image.convert("RGB")
+        buf = BytesIO()
+        image.save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode()
     return image if isinstance(image, str) else ""
 
 
 def _normalize(text: str) -> str:
     """Normalize text for comparison."""
-    text = re.sub(r"[$,]", "", text)
-    text = re.sub(r"(?s).*#### ", "", text)
-    text = re.sub(r"\.$", "", text)
+    text = _NORMALIZE_CURRENCY_RE.sub("", text)
+    text = _NORMALIZE_THOUGHT_RE.sub("", text)
+    text = _NORMALIZE_END_RE.sub("", text)
     return text.lower().strip()

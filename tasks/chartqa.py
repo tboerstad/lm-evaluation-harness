@@ -9,6 +9,10 @@ import datasets
 
 from core import APIConfig, _normalize, complete
 
+# Pre-compiled regex patterns for _relaxed_match
+_FINAL_ANSWER_RE = re.compile(r"FINAL ANSWER:\s*(.+?)(?:\n|$)", re.IGNORECASE)
+_NUMERIC_CLEAN_RE = re.compile(r"[$,%]")
+
 
 def _format_chartqa_prompt(query: str) -> str:
     """Format ChartQA prompt."""
@@ -24,7 +28,7 @@ def _format_chartqa_prompt(query: str) -> str:
 def _relaxed_match(response: str, target: str) -> float:
     """ChartQA metric: exact match or 5% numeric tolerance."""
     # Extract "FINAL ANSWER: X"
-    if match := re.search(r"FINAL ANSWER:\s*(.+?)(?:\n|$)", response, re.IGNORECASE):
+    if match := _FINAL_ANSWER_RE.search(response):
         pred = match.group(1).strip()
     else:
         pred = response.strip()
@@ -33,8 +37,8 @@ def _relaxed_match(response: str, target: str) -> float:
         return 1.0
 
     try:
-        pred_n = float(re.sub(r"[$,%]", "", pred))
-        target_n = float(re.sub(r"[$,%]", "", target))
+        pred_n = float(_NUMERIC_CLEAN_RE.sub("", pred))
+        target_n = float(_NUMERIC_CLEAN_RE.sub("", target))
         if target_n == 0:
             return 1.0 if pred_n == 0 else 0.0
         if abs(pred_n - target_n) / abs(target_n) <= 0.05:
@@ -51,7 +55,7 @@ async def eval_chartqa(config: APIConfig, limit: int | None = None) -> dict:
 
     Returns dict with relaxed_accuracy, num_samples, time_seconds.
     """
-    # Load
+    # Load - prefer test, then validation, then train (train last for limited runs)
     for split in ["test", "validation", "train"]:
         try:
             ds = datasets.load_dataset(

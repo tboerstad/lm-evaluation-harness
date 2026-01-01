@@ -2,9 +2,11 @@
 
 ## Setup (Run First)
 
-Before making any changes, install dev dependencies and pre-commit hooks:
+Before making any changes, create a virtual environment and install dependencies:
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -e ".[dev]"
 pre-commit install
 ```
