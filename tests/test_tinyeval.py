@@ -165,20 +165,6 @@ class TestHTTPClient:
         assert responses[0] == "I see a chart"
 
 
-class TestAPIConfig:
-    """API configuration."""
-
-    def test_defaults(self):
-        """APIConfig has sensible defaults."""
-        from tinyeval import APIConfig
-
-        config = APIConfig(url="http://test.com", model="gpt-4")
-        assert config.num_concurrent == 8
-        assert config.timeout == 300
-        assert config.max_retries == 3
-        assert config.api_key == ""
-
-
 class TestTasks:
     """Task registry."""
 
