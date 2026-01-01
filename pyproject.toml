@@ -17,13 +17,9 @@ requires-python = ">=3.10"
 dependencies = [
     # Dataset loading (HuggingFace datasets for benchmarks)
     "datasets>=2.16.0,<4.0",
-    # HTTP clients
+    # HTTP client
     "aiohttp",
-    "requests",
-    # Template rendering
-    "jinja2",
-    "pyyaml",
-    # Image handling (optional but common)
+    # Image handling (for multimodal tasks)
     "pillow",
 ]
 
@@ -35,9 +31,6 @@ dev = ["pytest", "pytest-cov", "ruff"]
 
 [tool.setuptools]
 py-modules = ["tinyeval"]
-
-[tool.setuptools.package-data]
-"*" = ["tasks/**/*.yaml"]
 
 [tool.ruff.lint]
 extend-select = ["E", "F", "I", "UP"]
