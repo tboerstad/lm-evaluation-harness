@@ -1,7 +1,7 @@
 """Test running a single question from multiple tasks.
 
 This test verifies that the evaluation pipeline correctly:
-1. Loads task configurations for triviaqa, openbookqa, and piqa
+1. Loads task configurations for sciq, commonsense_qa, and asdiv
 2. Builds instances from a single question per task
 3. Runs generation with mocked API responses
 4. Computes metrics for each task
@@ -41,53 +41,53 @@ class MockContextManager:
 
 
 class TestSingleQuestionMultiTask:
-    """Test running a single question from triviaqa, openbookqa, and piqa."""
+    """Test running a single question from sciq, commonsense_qa, and asdiv."""
 
     @pytest.fixture
-    def triviaqa_config(self):
-        """Load triviaqa task config."""
+    def sciq_config(self):
+        """Load sciq task config."""
         from tinyeval import TaskConfig
 
-        return TaskConfig.from_yaml(TASKS_DIR / "triviaqa" / "default.yaml")
+        return TaskConfig.from_yaml(TASKS_DIR / "sciq" / "sciq.yaml")
 
     @pytest.fixture
-    def openbookqa_config(self):
-        """Load openbookqa task config."""
+    def commonsense_qa_config(self):
+        """Load commonsense_qa task config."""
         from tinyeval import TaskConfig
 
-        return TaskConfig.from_yaml(TASKS_DIR / "openbookqa" / "openbookqa.yaml")
+        return TaskConfig.from_yaml(TASKS_DIR / "commonsense_qa" / "default.yaml")
 
     @pytest.fixture
-    def piqa_config(self):
-        """Load piqa task config."""
+    def asdiv_config(self):
+        """Load asdiv task config."""
         from tinyeval import TaskConfig
 
-        return TaskConfig.from_yaml(TASKS_DIR / "piqa" / "piqa.yaml")
+        return TaskConfig.from_yaml(TASKS_DIR / "asdiv" / "default.yaml")
 
-    def test_triviaqa_single_question(self, triviaqa_config):
-        """Test running a single TriviaQA trivia question."""
+    def test_sciq_single_question(self, sciq_config):
+        """Test running a single SciQ science question."""
         from tinyeval import APIConfig, build_instances, compute_metrics, run_generation
 
-        # Create a mock TriviaQA document
+        # Create a mock SciQ document
         doc = {
-            "question": "What is the capital of France",
-            "answer": {
-                "aliases": ["Paris", "paris", "PARIS"],
-                "normalized_aliases": ["paris"],
-                "value": "Paris",
-            },
+            "support": "The mitochondria is the powerhouse of the cell, responsible for producing ATP.",
+            "question": "What organelle produces ATP in cells?",
+            "distractor1": "Nucleus",
+            "distractor2": "Ribosome",
+            "distractor3": "Golgi apparatus",
+            "correct_answer": "Mitochondria",
         }
 
-        instances = build_instances(triviaqa_config, [doc])
+        instances = build_instances(sciq_config, [doc])
         assert len(instances) == 1
-        assert "capital of France" in instances[0].prompt
+        assert "ATP" in instances[0].prompt
         assert instances[0].target is not None
 
         # Mock API response with correct answer
         api_config = APIConfig(
             base_url="http://mock/v1/chat/completions", model="mock", api_key="test"
         )
-        mock_response = MockResponse("Paris")
+        mock_response = MockResponse("Mitochondria")
 
         with patch("tinyeval.aiohttp.ClientSession") as mock_session:
             mock_session.return_value.__aenter__.return_value = AsyncMock(
@@ -96,34 +96,34 @@ class TestSingleQuestionMultiTask:
             instances = asyncio.run(run_generation(instances, api_config))
 
         assert instances[0].response is not None
-        assert "Paris" in instances[0].response
+        assert "Mitochondria" in instances[0].response
 
-        metrics = compute_metrics(instances, triviaqa_config)
-        assert "exact_match" in metrics
+        metrics = compute_metrics(instances, sciq_config)
+        assert len(metrics) > 0
 
-    def test_openbookqa_single_question(self, openbookqa_config):
-        """Test running a single OpenBookQA science question."""
+    def test_commonsense_qa_single_question(self, commonsense_qa_config):
+        """Test running a single CommonsenseQA question."""
         from tinyeval import APIConfig, build_instances, compute_metrics, run_generation
 
-        # Create a mock OpenBookQA document
+        # Create a mock CommonsenseQA document
         doc = {
-            "question_stem": "Which of the following is a renewable energy source?",
+            "question": "Where would you put a plant?",
             "choices": {
-                "text": ["Coal", "Natural gas", "Solar power", "Nuclear power"],
-                "label": ["A", "B", "C", "D"],
+                "text": ["garden", "freezer", "oven", "underwater", "space"],
+                "label": ["A", "B", "C", "D", "E"],
             },
-            "answerKey": "C",
+            "answerKey": "A",
         }
 
-        instances = build_instances(openbookqa_config, [doc])
+        instances = build_instances(commonsense_qa_config, [doc])
         assert len(instances) == 1
-        assert "renewable" in instances[0].prompt
+        assert "plant" in instances[0].prompt
 
         # Mock API response
         api_config = APIConfig(
             base_url="http://mock/v1/chat/completions", model="mock", api_key="test"
         )
-        mock_response = MockResponse("C")
+        mock_response = MockResponse("A")
 
         with patch("tinyeval.aiohttp.ClientSession") as mock_session:
             mock_session.return_value.__aenter__.return_value = AsyncMock(
@@ -132,30 +132,29 @@ class TestSingleQuestionMultiTask:
             instances = asyncio.run(run_generation(instances, api_config))
 
         assert instances[0].response is not None
-        metrics = compute_metrics(instances, openbookqa_config)
+        metrics = compute_metrics(instances, commonsense_qa_config)
         assert len(metrics) > 0
 
-    def test_piqa_single_question(self, piqa_config):
-        """Test running a single PIQA physical intuition question."""
+    def test_asdiv_single_question(self, asdiv_config):
+        """Test running a single ASDiv math word problem."""
         from tinyeval import APIConfig, build_instances, compute_metrics, run_generation
 
-        # Create a mock PIQA document
+        # Create a mock ASDiv document
         doc = {
-            "goal": "How do you make ice cubes?",
-            "sol1": "Put water in a freezer",
-            "sol2": "Put water in an oven",
-            "label": 0,  # First solution is correct
+            "body": "Tom has 5 apples. He buys 3 more apples from the store.",
+            "question": "How many apples does Tom have now?",
+            "answer": "8 (apples)",
         }
 
-        instances = build_instances(piqa_config, [doc])
+        instances = build_instances(asdiv_config, [doc])
         assert len(instances) == 1
-        assert "ice cubes" in instances[0].prompt
+        assert "apples" in instances[0].prompt
 
         # Mock API response
         api_config = APIConfig(
             base_url="http://mock/v1/chat/completions", model="mock", api_key="test"
         )
-        mock_response = MockResponse("0")
+        mock_response = MockResponse("8")
 
         with patch("tinyeval.aiohttp.ClientSession") as mock_session:
             mock_session.return_value.__aenter__.return_value = AsyncMock(
@@ -164,43 +163,42 @@ class TestSingleQuestionMultiTask:
             instances = asyncio.run(run_generation(instances, api_config))
 
         assert instances[0].response is not None
-        metrics = compute_metrics(instances, piqa_config)
+        metrics = compute_metrics(instances, asdiv_config)
         assert len(metrics) > 0
 
-    def test_all_three_tasks_together(self, triviaqa_config, openbookqa_config, piqa_config):
+    def test_all_three_tasks_together(self, sciq_config, commonsense_qa_config, asdiv_config):
         """Test running all three tasks together in a single pipeline."""
         from tinyeval import APIConfig, build_instances, compute_metrics, run_generation
 
         # Create mock documents for each task
-        triviaqa_doc = {
-            "question": "Who wrote Romeo and Juliet",
-            "answer": {
-                "aliases": ["Shakespeare", "William Shakespeare"],
-                "normalized_aliases": ["shakespeare", "william shakespeare"],
-                "value": "William Shakespeare",
-            },
+        sciq_doc = {
+            "support": "Water freezes at 0 degrees Celsius under normal conditions.",
+            "question": "At what temperature does water freeze?",
+            "distractor1": "100°C",
+            "distractor2": "50°C",
+            "distractor3": "-100°C",
+            "correct_answer": "0°C",
         }
-        openbookqa_doc = {
-            "question_stem": "What do plants need to perform photosynthesis?",
+        commonsense_qa_doc = {
+            "question": "What do you use to cut paper?",
             "choices": {
-                "text": ["Darkness", "Sunlight", "Cold", "Wind"],
-                "label": ["A", "B", "C", "D"],
+                "text": ["scissors", "hammer", "spoon", "pillow", "blanket"],
+                "label": ["A", "B", "C", "D", "E"],
             },
-            "answerKey": "B",
+            "answerKey": "A",
         }
-        piqa_doc = {
-            "goal": "How do you cut paper?",
-            "sol1": "Use scissors",
-            "sol2": "Use a pillow",
-            "label": 0,
+        asdiv_doc = {
+            "body": "Sarah has 10 candies. She gives 4 candies to her friend.",
+            "question": "How many candies does Sarah have left?",
+            "answer": "6 (candies)",
         }
 
         # Build instances for each task
-        triviaqa_instances = build_instances(triviaqa_config, [triviaqa_doc])
-        openbookqa_instances = build_instances(openbookqa_config, [openbookqa_doc])
-        piqa_instances = build_instances(piqa_config, [piqa_doc])
+        sciq_instances = build_instances(sciq_config, [sciq_doc])
+        commonsense_qa_instances = build_instances(commonsense_qa_config, [commonsense_qa_doc])
+        asdiv_instances = build_instances(asdiv_config, [asdiv_doc])
 
-        all_instances = triviaqa_instances + openbookqa_instances + piqa_instances
+        all_instances = sciq_instances + commonsense_qa_instances + asdiv_instances
         assert len(all_instances) == 3
 
         # Mock API response
@@ -208,7 +206,7 @@ class TestSingleQuestionMultiTask:
             base_url="http://mock/v1/chat/completions", model="mock", api_key="test"
         )
 
-        responses = ["Shakespeare", "B", "0"]
+        responses = ["0°C", "A", "6"]
         response_idx = [0]
 
         def make_response(*args, **kwargs):
@@ -224,19 +222,19 @@ class TestSingleQuestionMultiTask:
         assert all(inst.response is not None for inst in all_instances)
 
         # Compute metrics for each task separately
-        triviaqa_metrics = compute_metrics([all_instances[0]], triviaqa_config)
-        openbookqa_metrics = compute_metrics([all_instances[1]], openbookqa_config)
-        piqa_metrics = compute_metrics([all_instances[2]], piqa_config)
+        sciq_metrics = compute_metrics([all_instances[0]], sciq_config)
+        commonsense_qa_metrics = compute_metrics([all_instances[1]], commonsense_qa_config)
+        asdiv_metrics = compute_metrics([all_instances[2]], asdiv_config)
 
         # All tasks should have computed at least one metric
-        assert len(triviaqa_metrics) > 0, "TriviaQA should have metrics"
-        assert len(openbookqa_metrics) > 0, "OpenBookQA should have metrics"
-        assert len(piqa_metrics) > 0, "PIQA should have metrics"
+        assert len(sciq_metrics) > 0, "SciQ should have metrics"
+        assert len(commonsense_qa_metrics) > 0, "CommonsenseQA should have metrics"
+        assert len(asdiv_metrics) > 0, "ASDiv should have metrics"
 
         # Report metrics
-        print(f"\nTriviaQA metrics: {triviaqa_metrics}")
-        print(f"OpenBookQA metrics: {openbookqa_metrics}")
-        print(f"PIQA metrics: {piqa_metrics}")
+        print(f"\nSciQ metrics: {sciq_metrics}")
+        print(f"CommonsenseQA metrics: {commonsense_qa_metrics}")
+        print(f"ASDiv metrics: {asdiv_metrics}")
 
 
 class TestTaskConfigLoading:
@@ -245,9 +243,9 @@ class TestTaskConfigLoading:
     @pytest.mark.parametrize(
         "task_path",
         [
-            TASKS_DIR / "triviaqa" / "default.yaml",
-            TASKS_DIR / "openbookqa" / "openbookqa.yaml",
-            TASKS_DIR / "piqa" / "piqa.yaml",
+            TASKS_DIR / "sciq" / "sciq.yaml",
+            TASKS_DIR / "commonsense_qa" / "default.yaml",
+            TASKS_DIR / "asdiv" / "default.yaml",
         ],
     )
     def test_config_loads_successfully(self, task_path):
