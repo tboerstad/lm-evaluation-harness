@@ -201,6 +201,53 @@ python -m pytest tests/test_cli_http.py -v
 ## Rollback
 If something is broken, the original code is available in git history before the refactor commits.
 
+### Phase 9: Minimal Standalone Implementation
+
+Created `lm_eval_mini.py` (~900 lines) - a standalone, minimal reimplementation that:
+
+1. **Core Design:**
+   - Single-file implementation with no external lm_eval dependencies
+   - Supports generation-only tasks (no logprobs/multiple_choice)
+   - Uses OpenAI-compatible chat completions API (required for vision models)
+   - Async HTTP with aiohttp and semaphore-based concurrency control
+
+2. **Supported Tasks:**
+   - **GSM8K** - Math reasoning benchmark
+   - **ChartQA** - Multimodal chart question answering (images + text)
+
+3. **Key Components:**
+   - `TaskConfig` - Dataclass for YAML task configuration
+   - `Instance` - Request instance with document and metadata
+   - `APIConfig` - API endpoint configuration
+   - `LocalCompletionsAPI` - Main API client with sync/async support
+
+4. **Multimodal/Image Support:**
+   - `encode_image_to_base64()` - Encodes PIL images to base64
+   - `build_multimodal_message()` - Builds vision API message format
+   - `get_images_from_doc()` - Extracts images from documents
+   - `TaskConfig.is_multimodal` - Property to detect image tasks
+
+5. **Metrics:**
+   - `exact_match()` - Exact string matching (case-insensitive option)
+   - `relaxed_accuracy()` - ChartQA metric with 5% numeric tolerance
+   - `anywhere_accuracy()` - Substring matching anywhere in response
+
+6. **YAML Config Loading:**
+   - `load_yaml_task_config()` - Parses YAML with jinja2 templates
+   - Supports `doc_to_text`, `doc_to_target`, `doc_to_image` fields
+   - Handles `generation_kwargs` (temperature, max_gen_toks, until)
+
+7. **Files Created:**
+   - `lm_eval_mini.py` - Main implementation (~900 lines)
+   - `tests/test_lm_eval_mini.py` - Comprehensive tests (~330 lines)
+
+8. **Test Coverage:**
+   - HTTP request formation (sync and async)
+   - Image/multimodal message building
+   - Metrics (exact_match, relaxed_accuracy, anywhere_accuracy)
+   - Task configuration loading
+   - Payload structure validation
+
 ## Known Limitations
 - No local model inference (by design)
 - No multi-GPU support (by design)
@@ -210,3 +257,4 @@ If something is broken, the original code is available in git history before the
 - No W&B or Zeno result visualization (removed)
 - No HuggingFace evaluate metrics fallback (removed)
 - Task-specific optional dependencies removed (ifeval, math, multilingual) - tasks using these may have reduced functionality
+- Minimal implementation (`lm_eval_mini.py`) only supports GSM8K and ChartQA explicitly
