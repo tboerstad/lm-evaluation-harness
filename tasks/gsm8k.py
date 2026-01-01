@@ -10,11 +10,14 @@ Responsibilities:
 
 from __future__ import annotations
 
+import logging
 import re
 
 import datasets
 
 from core import APIConfig, _normalize, run_task
+
+logger = logging.getLogger(__name__)
 
 GSM8K_FEWSHOT = [
     (
@@ -133,7 +136,7 @@ async def eval_gsm8k(config: APIConfig, limit: int | None = None) -> dict:
         "exact_match": correct / len(docs),
         "relaxed_accuracy": correct / len(docs),
     }
-    print(f"gsm8k_llama: {metrics} ({elapsed:.2f}s)")
+    logger.info("gsm8k_llama: %s (%.2fs)", metrics, elapsed)
 
     return {
         "task": "gsm8k_llama",
