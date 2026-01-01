@@ -170,37 +170,43 @@ class TestSeedReproducibility:
     def test_fewshot_same_seed_same_examples(self):
         """Same seed produces identical few-shot examples."""
         import random
-        from lm_eval_mini import TaskConfig, get_fewshot_examples
+        from lm_eval_mini import get_fewshot_examples
 
-        class MockDataset(dict):
-            pass
-        dataset = MockDataset()
-        dataset["train"] = [{"q": f"Q{i}", "a": f"A{i}"} for i in range(100)]
-
-        config = TaskConfig(task="test", dataset_path="test", training_split="train")
+        docs = [{"q": f"Q{i}", "a": f"A{i}"} for i in range(100)]
 
         rng1 = random.Random(42)
         rng2 = random.Random(42)
-        examples1 = get_fewshot_examples(config, dataset, 5, rng1)
-        examples2 = get_fewshot_examples(config, dataset, 5, rng2)
+        examples1 = get_fewshot_examples(docs, 5, rng1)
+        examples2 = get_fewshot_examples(docs, 5, rng2)
 
         assert examples1 == examples2, "Same seed should produce identical examples"
 
     def test_fewshot_different_seed_different_examples(self):
         """Different seeds produce different few-shot examples."""
         import random
-        from lm_eval_mini import TaskConfig, get_fewshot_examples
+        from lm_eval_mini import get_fewshot_examples
 
-        class MockDataset(dict):
-            pass
-        dataset = MockDataset()
-        dataset["train"] = [{"q": f"Q{i}", "a": f"A{i}"} for i in range(100)]
-
-        config = TaskConfig(task="test", dataset_path="test", training_split="train")
+        docs = [{"q": f"Q{i}", "a": f"A{i}"} for i in range(100)]
 
         rng1 = random.Random(42)
         rng2 = random.Random(99)
-        examples1 = get_fewshot_examples(config, dataset, 5, rng1)
-        examples2 = get_fewshot_examples(config, dataset, 5, rng2)
+        examples1 = get_fewshot_examples(docs, 5, rng1)
+        examples2 = get_fewshot_examples(docs, 5, rng2)
 
         assert examples1 != examples2, "Different seeds should produce different examples"
+
+    def test_fewshot_exclude_indices(self):
+        """Excluded indices are not sampled."""
+        import random
+        from lm_eval_mini import get_fewshot_examples
+
+        docs = [{"q": f"Q{i}", "a": f"A{i}"} for i in range(10)]
+        exclude = {0, 1, 2, 3, 4}  # Exclude first 5
+
+        rng = random.Random(42)
+        examples = get_fewshot_examples(docs, 3, rng, exclude_indices=exclude)
+
+        # All examples should be from indices 5-9
+        for ex in examples:
+            idx = int(ex["q"][1:])
+            assert idx >= 5, f"Got excluded index {idx}"
