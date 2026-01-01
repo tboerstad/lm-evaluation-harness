@@ -1,8 +1,8 @@
 # Agent Instructions
 
-## Setup (Run First)
+## Setup (MUST RUN FIRST)
 
-The `.venv` directory is gitignored and won't exist in fresh sessions. Create it before making any changes:
+`.venv` is gitignored and DOES NOT EXIST in fresh sessions. Create it before making any changes:
 
 ```bash
 python -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]" && pre-commit install
