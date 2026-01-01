@@ -1,4 +1,10 @@
-"""Task registry for tinyeval."""
+"""
+Task registry for tinyeval.
+
+Maps task names to evaluation functions:
+- gsm8k_llama: 8-shot grade school math
+- chartqa: multimodal chart understanding
+"""
 
 from tasks.chartqa import eval_chartqa
 from tasks.gsm8k import eval_gsm8k

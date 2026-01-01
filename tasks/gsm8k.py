@@ -1,4 +1,12 @@
-"""GSM8K task - grade school math with chain of thought."""
+"""
+GSM8K evaluation - grade school math with chain-of-thought.
+
+Responsibilities:
+- Load gsm8k dataset
+- Format 8-shot prompts with reasoning examples
+- Extract numeric answers from responses
+- Compute exact_match (normalized string comparison)
+"""
 
 from __future__ import annotations
 

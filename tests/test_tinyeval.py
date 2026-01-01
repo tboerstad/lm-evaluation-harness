@@ -1,4 +1,14 @@
-"""Tests for tinyeval: HTTP client, image handling, metrics, task functions."""
+"""
+Test suite for tinyeval.
+
+Coverage:
+- Image encoding (PIL→base64, paths, URL rejection)
+- Text normalization and metrics
+- GSM8K: prompt formatting, answer extraction
+- ChartQA: prompt formatting, relaxed matching
+- HTTP client: text and multimodal completions
+- Integration: end-to-end pipeline
+"""
 
 import asyncio
 import base64

@@ -1,4 +1,13 @@
-"""Core utilities for tinyeval - shared by main module and tasks."""
+"""
+Core utilities for tinyeval.
+
+Responsibilities:
+- APIConfig: endpoint, model, concurrency, timeout
+- complete(): async batch chat completions (OpenAI-compatible)
+- run_task(): format prompts, time requests, return responses
+- _normalize(): text normalization for comparison
+- _encode_image(): PIL→base64; rejects remote URLs
+"""
 
 from __future__ import annotations
 

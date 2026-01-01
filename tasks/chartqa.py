@@ -1,4 +1,12 @@
-"""ChartQA task - multimodal chart understanding."""
+"""
+ChartQA evaluation - multimodal chart understanding.
+
+Responsibilities:
+- Load ChartQA dataset (test/validation/train fallback)
+- Format prompts with image and query
+- Extract "FINAL ANSWER:" from responses
+- Compute exact_match + relaxed_accuracy (5% tolerance)
+"""
 
 from __future__ import annotations
 

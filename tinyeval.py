@@ -1,9 +1,22 @@
 #!/usr/bin/env python3
 """
-tinyeval - Minimal LLM evaluation harness.
+tinyeval CLI entry point.
 
-Two tasks: gsm8k_llama (text) and chartqa (multimodal).
-One abstraction: batch HTTP requests to an OpenAI-compatible API.
+Responsibilities:
+- Parse CLI args (tasks, model, endpoint, concurrency)
+- Create APIConfig, run tasks
+- Output JSON
+
+Architecture:
+    tinyeval.py (CLI, orchestration)
+         │
+    ┌────┴────┐
+  core.py   tasks/
+  APIConfig   TASKS registry
+  complete()  gsm8k.py
+  run_task()  chartqa.py
+
+Flow: CLI → APIConfig → evaluate() → TASKS[name]() → JSON
 """
 
 from __future__ import annotations
