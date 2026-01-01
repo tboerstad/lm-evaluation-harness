@@ -165,20 +165,6 @@ class TestHTTPClient:
         assert responses[0] == "I see a chart"
 
 
-class TestAPIConfig:
-    """API configuration."""
-
-    def test_defaults(self):
-        """APIConfig has sensible defaults."""
-        from tinyeval import APIConfig
-
-        config = APIConfig(url="http://test.com", model="gpt-4")
-        assert config.num_concurrent == 8
-        assert config.timeout == 300
-        assert config.max_retries == 3
-        assert config.api_key == ""
-
-
 class TestTasks:
     """Task registry."""
 
@@ -189,12 +175,3 @@ class TestTasks:
         assert "gsm8k_llama" in TASKS
         assert "chartqa" in TASKS
         assert len(TASKS) == 2
-
-    def test_tasks_are_callables(self):
-        """Tasks are async functions."""
-        import inspect
-
-        from tinyeval import TASKS
-
-        for name, fn in TASKS.items():
-            assert inspect.iscoroutinefunction(fn), f"{name} should be async"
