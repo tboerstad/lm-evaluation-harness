@@ -27,10 +27,11 @@ dependencies = [
 tinyeval = "tinyeval:main"
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-cov", "ruff"]
+dev = ["pytest", "pytest-cov", "ruff", "pre-commit"]
 
 [tool.setuptools]
-py-modules = ["tinyeval"]
+py-modules = ["tinyeval", "core"]
+packages = ["tasks"]
 
 [tool.ruff.lint]
 extend-select = ["E", "F", "I", "UP"]
@@ -38,4 +39,4 @@ ignore = ["E501"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
-known-first-party = ["tinyeval"]
+known-first-party = ["tinyeval", "core", "tasks"]
