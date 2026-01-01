@@ -50,6 +50,42 @@ Simplified `lm_eval/models/openai_completions.py`:
 - Merged `OpenAIChatCompletion` into `LocalChatCompletion`
 - Both `local-*` and `openai-*` names now point to the same classes (backwards compatible)
 
+### Phase 6: Remove Optional Dependencies and Integrations
+Removed all optional dependencies and their related code:
+
+1. **Optional dependency groups from `pyproject.toml`:**
+   - `ifeval`: langdetect, immutabledict, nltk
+   - `math`: sympy, antlr4-python3-runtime, math_verify
+   - `multilingual`: nagisa, jieba, pycountry
+
+2. **hf_transfer integration:**
+   - Removed from `lm_eval/__init__.py`
+
+3. **HuggingFace evaluate library integration:**
+   - Removed `HAS_HF_EVALUATE` and fallback logic from `lm_eval/api/registry.py`
+   - Simplified `get_metric()` function to only use local registry
+   - Removed `hf_evaluate_metric` parameter handling from `lm_eval/api/task.py`
+
+4. **Weights & Biases (wandb) integration:**
+   - Deleted `lm_eval/loggers/wandb_logger.py`
+   - Removed `WandbLogger` from `lm_eval/loggers/__init__.py`
+   - Removed `--wandb_args` and `--wandb_config_args` CLI arguments
+   - Removed `wandb_args` and `wandb_config_args` from `EvaluatorConfig`
+
+5. **Zeno visualization:**
+   - Deleted `scripts/zeno_visualize.py`
+   - Deleted `tests/scripts/test_zeno_visualize.py`
+
+6. **Example files removed:**
+   - `examples/visualize-wandb.ipynb`
+   - `examples/visualize-zeno.ipynb`
+   - `examples/transformer-lens.py` (used removed HF backend)
+
+7. **Documentation updates:**
+   - Removed wandb_args from `docs/config_files.md` and `docs/interface.md`
+   - Removed "Visualizing Results" section from `README.md`
+   - Simplified Optional Extras section in `README.md`
+
 ## Current State
 
 ### Available Models
@@ -64,14 +100,19 @@ Simplified `lm_eval/models/openai_completions.py`:
 - `lm_eval/models/api_models.py` - Base TemplateAPI class
 - `lm_eval/models/utils.py` - Utility functions (no torch)
 - `lm_eval/api/model.py` - Base LM class
-- `lm_eval/api/registry.py` - Model/task registry
+- `lm_eval/api/registry.py` - Model/task registry (no HF evaluate fallback)
+- `lm_eval/api/task.py` - Task configuration (removed hf_evaluate handling)
 - `lm_eval/evaluator.py` - Main evaluation logic (no multi-GPU)
+- `lm_eval/loggers/__init__.py` - Only exports EvaluationTracker
 - `lm_eval/loggers/utils.py` - Logging utilities
-- `pyproject.toml` - Minimal dependencies
+- `lm_eval/_cli/run.py` - CLI (removed wandb args)
+- `lm_eval/config/evaluate_config.py` - Config (removed wandb fields)
+- `pyproject.toml` - Minimal dependencies (only dev/testing extras)
 
 ### Lines of Code Removed
 - ~8,000 lines from model backends
 - Significant reduction in evaluator.py (removed distributed code)
+- ~1,200 lines from optional integrations (wandb, zeno, examples)
 
 ## How to Test
 ```bash
@@ -94,3 +135,6 @@ If something is broken, the original code is available in git history before the
 - No multi-GPU support (by design)
 - `datasets` library still required for loading benchmarks
 - Some task-specific utils still have torch/transformers imports (in `lm_eval/tasks/`)
+- No W&B or Zeno result visualization (removed)
+- No HuggingFace evaluate metrics fallback (removed)
+- Task-specific optional dependencies removed (ifeval, math, multilingual) - tasks using these may have reduced functionality
