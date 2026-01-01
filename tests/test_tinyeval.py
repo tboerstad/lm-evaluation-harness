@@ -5,6 +5,7 @@ import base64
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from PIL import Image
 
 from core import (
     APIConfig,
@@ -13,6 +14,7 @@ from core import (
     _normalize,
     complete,
 )
+from tinyeval import evaluate
 from tasks import TASKS
 from tasks.chartqa import _format_chartqa_prompt, _relaxed_match
 from tasks.gsm8k import _extract_gsm8k_answer, _format_gsm8k_prompt
@@ -43,8 +45,6 @@ class TestImageHandling:
 
     def test_encode_pil_image_and_string_passthrough(self):
         """PIL images encode to base64; local strings pass through; URLs rejected."""
-        from PIL import Image
-
         img = Image.new("RGB", (10, 10), color="red")
         b64 = _encode_image(img)
         assert base64.b64decode(b64)  # Valid base64
@@ -164,3 +164,34 @@ class TestTasks:
         assert "gsm8k_llama" in TASKS
         assert "chartqa" in TASKS
         assert len(TASKS) == 2
+
+
+class TestIntegration:
+    """End-to-end integration tests."""
+
+    def test_evaluate_gsm8k_end_to_end(self):
+        """Full GSM8K evaluation pipeline with mocked API and dataset."""
+        mock_docs = [{"question": "What is 2 + 2?", "answer": "#### 4"}]
+        response = {"choices": [{"message": {"content": "The final answer is 4"}}]}
+
+        with (
+            patch("tasks.gsm8k.datasets.load_dataset") as mock_ds,
+            patch("core.aiohttp.ClientSession") as mock_session,
+        ):
+            # Mock streaming dataset with .take() method
+            mock_ds.return_value.take.return_value = mock_docs
+            mock_session.return_value.__aenter__.return_value = _make_mock_session(
+                response
+            )
+
+            config = APIConfig(url="http://test.com/v1/chat/completions", model="test")
+            result = asyncio.run(evaluate(["gsm8k_llama"], config, limit=1))
+
+        assert result["results"]["gsm8k_llama"]["metrics"]["exact_match"] == 1.0
+        assert result["results"]["gsm8k_llama"]["num_samples"] == 1
+
+    def test_evaluate_invalid_task(self):
+        """Evaluation raises ValueError for unknown task."""
+        config = APIConfig(url="http://test.com", model="test")
+        with pytest.raises(ValueError, match="Unknown task"):
+            asyncio.run(evaluate(["nonexistent_task"], config))
