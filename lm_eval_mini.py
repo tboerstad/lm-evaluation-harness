@@ -41,7 +41,7 @@ OutputType = Literal["generate_until"]
 
 @dataclass
 class TaskConfig:
-    """Configuration loaded from a YAML task file."""
+    """YAML task configuration (dataset, prompts, metrics, generation settings)."""
     task: str
     dataset_path: str
     dataset_name: str | None = None
@@ -63,32 +63,21 @@ class TaskConfig:
 
     @classmethod
     def from_yaml(cls, path: Path) -> TaskConfig:
-        """Load a task config from a YAML file."""
-        # Create a custom loader that handles !function tags
+        """Load config from YAML, handling !function tags and includes."""
         class FunctionTagLoader(yaml.SafeLoader):
             pass
-
-        def function_constructor(loader, node):
-            """Convert !function tags to string representation."""
-            return loader.construct_scalar(node)
-
-        FunctionTagLoader.add_constructor("!function", function_constructor)
+        FunctionTagLoader.add_constructor("!function", lambda loader, node: loader.construct_scalar(node))
 
         with open(path) as f:
             data = yaml.load(f, Loader=FunctionTagLoader)
 
-        # Handle includes
         if "include" in data:
-            include_path = path.parent / data.pop("include")
-            base = cls.from_yaml(include_path)
+            base = cls.from_yaml(path.parent / data.pop("include"))
             for key, value in data.items():
                 setattr(base, key, value)
             return base
 
-        if "task" not in data:
-            data["task"] = path.stem
-
-        # Normalize doc_to_image to list
+        data.setdefault("task", path.stem)
         if "doc_to_image" in data and isinstance(data["doc_to_image"], str):
             data["doc_to_image"] = [data["doc_to_image"]]
 
@@ -101,7 +90,7 @@ class TaskConfig:
 
 @dataclass
 class Instance:
-    """A single evaluation instance."""
+    """Single evaluation instance: prompt, target, optional images, and response."""
     doc: dict[str, Any]
     doc_id: int
     prompt: str
@@ -113,7 +102,7 @@ class Instance:
 
 @dataclass
 class EvalResult:
-    """Results for a single task."""
+    """Evaluation results: task name, computed metrics, sample count."""
     task: str
     metrics: dict[str, float]
     num_samples: int
@@ -128,7 +117,7 @@ _jinja_env = jinja2.Environment(undefined=jinja2.StrictUndefined)
 
 
 def render_template(template: str, doc: dict[str, Any]) -> str:
-    """Render a jinja2 template with the document context."""
+    """Render jinja2 template with document as context."""
     try:
         return _jinja_env.from_string(template).render(**doc)
     except jinja2.UndefinedError as e:
@@ -137,19 +126,13 @@ def render_template(template: str, doc: dict[str, Any]) -> str:
 
 
 def resolve_field(doc: dict[str, Any], field_spec: str | list | int | None) -> Any:
-    """Resolve a field specification against a document."""
-    if field_spec is None:
-        return None
-    if isinstance(field_spec, int):
-        return field_spec
-    if isinstance(field_spec, list):
+    """Resolve field spec: return literal, doc field, or rendered template."""
+    if field_spec is None or isinstance(field_spec, (int, list)):
         return field_spec
     if field_spec in doc:
         return doc[field_spec]
     result = render_template(field_spec, doc)
-    if result.isdigit():
-        return int(result)
-    return result
+    return int(result) if result.isdigit() else result
 
 
 # ============================================================================
@@ -157,7 +140,7 @@ def resolve_field(doc: dict[str, Any], field_spec: str | list | int | None) -> A
 # ============================================================================
 
 def encode_image_to_base64(image: Any, fmt: str = "PNG") -> str:
-    """Encode a PIL Image to base64 string."""
+    """Encode PIL Image to base64. Strings (URLs/base64) pass through unchanged."""
     try:
         from PIL import Image
         if isinstance(image, Image.Image):
@@ -166,45 +149,28 @@ def encode_image_to_base64(image: Any, fmt: str = "PNG") -> str:
             return base64.b64encode(buf.getvalue()).decode("utf-8")
     except ImportError:
         pass
-
-    # If already a string (URL or base64), return as-is
     if isinstance(image, str):
         return image
-
     log.warning(f"Unknown image type: {type(image)}")
     return ""
 
 
 def get_images_from_doc(doc: dict[str, Any], image_fields: list[str]) -> list[Any]:
-    """Extract images from document based on field specifications."""
+    """Extract images from doc fields, flattening lists."""
     images = []
-    for field_name in image_fields:
-        img = doc.get(field_name)
-        if img is not None:
-            if isinstance(img, list):
-                images.extend(img)
-            else:
-                images.append(img)
+    for name in image_fields:
+        if (img := doc.get(name)) is not None:
+            images.extend(img if isinstance(img, list) else [img])
     return images
 
 
 def build_multimodal_message(text: str, images: list[Any]) -> list[dict[str, Any]]:
-    """Build a chat message with text and images for vision API."""
-    content: list[dict[str, Any]] = []
-
-    # Add images first
-    for img in images:
-        img_b64 = encode_image_to_base64(img)
-        if img_b64:
-            content.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{img_b64}"}
-            })
-
-    # Add text (remove <image> placeholders)
-    clean_text = text.replace("<image>", "").strip()
-    content.append({"type": "text", "text": clean_text})
-
+    """Build vision API message: images first, then text (with <image> removed)."""
+    content: list[dict[str, Any]] = [
+        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}}
+        for img in images if (b64 := encode_image_to_base64(img))
+    ]
+    content.append({"type": "text", "text": text.replace("<image>", "").strip()})
     return [{"role": "user", "content": content}]
 
 
@@ -213,66 +179,44 @@ def build_multimodal_message(text: str, images: list[Any]) -> list[dict[str, Any
 # ============================================================================
 
 def get_fewshot_examples(
-    config: TaskConfig,
-    dataset: datasets.DatasetDict,
-    num_fewshot: int,
-    rng: random.Random,
+    config: TaskConfig, dataset: datasets.DatasetDict, num_fewshot: int, rng: random.Random,
 ) -> list[dict]:
-    """Sample few-shot examples from the training/fewshot split."""
+    """Sample num_fewshot examples from training/fewshot split."""
     if num_fewshot == 0:
         return []
-
-    split_name = config.fewshot_split or config.training_split
-    if not split_name or split_name not in dataset:
+    split = config.fewshot_split or config.training_split
+    if not split or split not in dataset:
         return []
-
-    fewshot_docs = list(dataset[split_name])
-    return rng.sample(fewshot_docs, min(num_fewshot, len(fewshot_docs)))
+    docs = list(dataset[split])
+    return rng.sample(docs, min(num_fewshot, len(docs)))
 
 
 def build_fewshot_context(config: TaskConfig, examples: list[dict]) -> str:
-    """Build the few-shot context string."""
+    """Format few-shot examples as context string."""
     if not examples:
         return ""
-
-    parts = []
-    for doc in examples:
-        text = resolve_field(doc, config.doc_to_text)
-        target = resolve_field(doc, config.doc_to_target)
-        parts.append(f"{text}{config.target_delimiter}{target}")
-
+    parts = [
+        f"{resolve_field(doc, config.doc_to_text)}{config.target_delimiter}{resolve_field(doc, config.doc_to_target)}"
+        for doc in examples
+    ]
     return config.fewshot_delimiter.join(parts) + config.fewshot_delimiter
 
 
 def build_instances(
-    config: TaskConfig,
-    docs: list[dict],
-    fewshot_context: str = "",
-    limit: int | None = None,
+    config: TaskConfig, docs: list[dict], fewshot_context: str = "", limit: int | None = None,
 ) -> list[Instance]:
-    """Build evaluation instances from documents."""
+    """Convert documents to evaluation instances with prompts and targets."""
     instances = []
-    docs_to_use = docs[:limit] if limit else docs
-
-    for doc_id, doc in enumerate(docs_to_use):
-        text = resolve_field(doc, config.doc_to_text)
+    for doc_id, doc in enumerate(docs[:limit] if limit else docs):
         target = resolve_field(doc, config.doc_to_target)
-        prompt = fewshot_context + str(text)
-
-        # Extract images if multimodal
-        images = []
-        if config.doc_to_image:
-            images = get_images_from_doc(doc, config.doc_to_image)
-
         instances.append(Instance(
             doc=doc,
             doc_id=doc_id,
-            prompt=prompt,
-            target=str(target) if not isinstance(target, list) else target,
-            images=images,
+            prompt=fewshot_context + str(resolve_field(doc, config.doc_to_text)),
+            target=target if isinstance(target, list) else str(target),
+            images=get_images_from_doc(doc, config.doc_to_image) if config.doc_to_image else [],
             generation_kwargs=config.generation_kwargs.copy(),
         ))
-
     return instances
 
 
@@ -282,7 +226,7 @@ def build_instances(
 
 @dataclass
 class APIConfig:
-    """Configuration for the API client."""
+    """OpenAI-compatible API configuration."""
     base_url: str
     model: str
     api_key: str = ""
@@ -295,7 +239,7 @@ class APIConfig:
 
 
 def handle_stop_sequences(until: list[str] | str | None) -> list[str]:
-    """Process stop sequences into a clean list."""
+    """Normalize stop sequences to list, filtering empties."""
     if until is None:
         return []
     if isinstance(until, str):
@@ -304,105 +248,80 @@ def handle_stop_sequences(until: list[str] | str | None) -> list[str]:
 
 
 def create_chat_payload(
-    messages: list[dict[str, Any]],
-    config: APIConfig,
-    gen_kwargs: dict[str, Any] | None = None,
+    messages: list[dict[str, Any]], config: APIConfig, gen_kwargs: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Create the payload for a chat completions API request."""
+    """Build chat completions request payload."""
     gen_kwargs = gen_kwargs or {}
-
-    max_tokens = gen_kwargs.get("max_tokens") or gen_kwargs.get("max_gen_toks", config.max_tokens)
-    temperature = gen_kwargs.get("temperature", config.temperature)
-    stop = handle_stop_sequences(gen_kwargs.get("until"))
-
     payload: dict[str, Any] = {
         "model": config.model,
         "messages": messages,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
+        "max_tokens": gen_kwargs.get("max_tokens") or gen_kwargs.get("max_gen_toks", config.max_tokens),
+        "temperature": gen_kwargs.get("temperature", config.temperature),
         "seed": config.seed,
     }
-
-    if stop:
-        payload["stop"] = stop[:4]  # OpenAI limits to 4 stop sequences
-
+    if stop := handle_stop_sequences(gen_kwargs.get("until")):
+        payload["stop"] = stop[:4]  # OpenAI limits to 4
     return payload
 
 
 def create_text_message(text: str) -> list[dict[str, Any]]:
-    """Create a simple text-only chat message."""
+    """Create simple text-only user message."""
     return [{"role": "user", "content": text}]
 
 
 async def make_request(
-    session: aiohttp.ClientSession,
-    url: str,
-    payload: dict[str, Any],
-    headers: dict[str, str],
-    semaphore: asyncio.Semaphore,
-    max_retries: int = 3,
+    session: aiohttp.ClientSession, url: str, payload: dict[str, Any],
+    headers: dict[str, str], semaphore: asyncio.Semaphore, max_retries: int = 3,
 ) -> dict[str, Any] | None:
-    """Make a single API request with retries."""
+    """POST request with exponential backoff retry."""
     for attempt in range(max_retries):
         try:
-            async with semaphore:
-                async with session.post(url, json=payload, headers=headers) as response:
-                    if response.ok:
-                        return await response.json()
-                    error_text = await response.text()
-                    log.warning(f"Request failed (attempt {attempt + 1}): {error_text}")
+            async with semaphore, session.post(url, json=payload, headers=headers) as resp:
+                if resp.ok:
+                    return await resp.json()
+                log.warning(f"Request failed (attempt {attempt + 1}): {await resp.text()}")
         except Exception as e:
             log.warning(f"Request error (attempt {attempt + 1}): {e}")
-
         if attempt < max_retries - 1:
             await asyncio.sleep(2 ** attempt)
-
     return None
 
 
 def parse_chat_response(response: dict[str, Any] | None) -> str:
-    """Parse a chat completion response."""
-    if not response or "choices" not in response:
+    """Extract content from chat completion response."""
+    if not response or not (choices := response.get("choices")):
         return ""
-    choices = response.get("choices", [])
-    if not choices:
-        return ""
-    message = choices[0].get("message", {})
-    return message.get("content", "")
+    return choices[0].get("message", {}).get("content", "")
 
 
 async def run_generation(
-    instances: list[Instance],
-    config: APIConfig,
-    is_multimodal: bool = False,
+    instances: list[Instance], config: APIConfig, is_multimodal: bool = False,
 ) -> list[Instance]:
-    """Run generation requests for all instances."""
+    """Run async generation requests for all instances, populating responses."""
     if not instances:
         return instances
 
-    headers = {"Authorization": f"Bearer {config.api_key}"} if config.api_key else {}
-    headers["Content-Type"] = "application/json"
+    headers = {"Content-Type": "application/json"}
+    if config.api_key:
+        headers["Authorization"] = f"Bearer {config.api_key}"
 
     semaphore = asyncio.Semaphore(config.num_concurrent)
     connector = aiohttp.TCPConnector(limit=config.num_concurrent)
-    timeout = aiohttp.ClientTimeout(total=config.timeout)
 
-    async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-        tasks = []
-        for inst in instances:
-            if is_multimodal and inst.images:
-                messages = build_multimodal_message(inst.prompt, inst.images)
-            else:
-                messages = create_text_message(inst.prompt)
-
-            payload = create_chat_payload(messages, config, inst.generation_kwargs)
-            tasks.append(make_request(
-                session, config.base_url, payload, headers, semaphore, config.max_retries
-            ))
-
-        responses = await asyncio.gather(*tasks)
-
-        for inst, response in zip(instances, responses):
+    async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=config.timeout)) as session:
+        tasks = [
+            make_request(
+                session, config.base_url,
+                create_chat_payload(
+                    build_multimodal_message(inst.prompt, inst.images) if is_multimodal and inst.images
+                    else create_text_message(inst.prompt),
+                    config, inst.generation_kwargs
+                ),
+                headers, semaphore, config.max_retries
+            )
+            for inst in instances
+        ]
+        for inst, response in zip(instances, await asyncio.gather(*tasks)):
             inst.response = parse_chat_response(response)
 
     return instances
@@ -413,15 +332,12 @@ async def run_generation(
 # ============================================================================
 
 def normalize_text(
-    text: str,
-    ignore_case: bool = False,
-    ignore_punctuation: bool = False,
+    text: str, ignore_case: bool = False, ignore_punctuation: bool = False,
     regexes_to_ignore: list[str] | None = None,
 ) -> str:
-    """Normalize text for comparison."""
-    if regexes_to_ignore:
-        for pattern in regexes_to_ignore:
-            text = re.sub(pattern, "", text)
+    """Normalize text: apply regex removals, case folding, punctuation removal."""
+    for pattern in (regexes_to_ignore or []):
+        text = re.sub(pattern, "", text)
     if ignore_case:
         text = text.lower()
     if ignore_punctuation:
@@ -430,147 +346,97 @@ def normalize_text(
 
 
 def exact_match(
-    prediction: str,
-    reference: str | list[str],
-    ignore_case: bool = False,
-    ignore_punctuation: bool = False,
-    regexes_to_ignore: list[str] | None = None,
+    prediction: str, reference: str | list[str], ignore_case: bool = False,
+    ignore_punctuation: bool = False, regexes_to_ignore: list[str] | None = None,
 ) -> float:
-    """Compute exact match metric."""
-    pred_norm = normalize_text(prediction, ignore_case, ignore_punctuation, regexes_to_ignore)
-
-    if isinstance(reference, list):
-        refs_norm = [normalize_text(r, ignore_case, ignore_punctuation, regexes_to_ignore) for r in reference]
-        return 1.0 if pred_norm in refs_norm else 0.0
-
-    ref_norm = normalize_text(reference, ignore_case, ignore_punctuation, regexes_to_ignore)
-    return 1.0 if pred_norm == ref_norm else 0.0
+    """Return 1.0 if normalized prediction matches any reference exactly."""
+    pred = normalize_text(prediction, ignore_case, ignore_punctuation, regexes_to_ignore)
+    refs = reference if isinstance(reference, list) else [reference]
+    return 1.0 if pred in [normalize_text(r, ignore_case, ignore_punctuation, regexes_to_ignore) for r in refs] else 0.0
 
 
 def relaxed_accuracy(prediction: str, reference: str | list[str]) -> float:
-    """
-    Relaxed accuracy for ChartQA - handles numeric comparisons with tolerance.
-    Returns 1.0 if prediction matches reference within 5% tolerance for numbers.
-    """
+    """ChartQA metric: exact match or 5% numeric tolerance. Extracts from 'Final Answer:' format."""
     def extract_answer(text: str) -> str:
-        # Extract from "Final Answer: X" format
-        match = re.search(r"Final Answer:\s*(.+?)(?:\n|$)", text, re.IGNORECASE)
-        if match:
+        if match := re.search(r"Final Answer:\s*(.+?)(?:\n|$)", text, re.IGNORECASE):
             return match.group(1).strip()
         return text.strip()
 
-    def try_parse_number(s: str) -> float | None:
-        s = s.replace(",", "").replace("%", "").replace("$", "").strip()
+    def parse_number(s: str) -> float | None:
         try:
-            return float(s)
+            return float(s.replace(",", "").replace("%", "").replace("$", "").strip())
         except ValueError:
             return None
 
     pred = extract_answer(prediction)
-    refs = reference if isinstance(reference, list) else [reference]
-
-    for ref in refs:
+    for ref in (reference if isinstance(reference, list) else [reference]):
         ref_clean = str(ref).strip()
-
-        # Try exact match first (case insensitive)
         if pred.lower() == ref_clean.lower():
             return 1.0
-
-        # Try numeric comparison with 5% tolerance
-        pred_num = try_parse_number(pred)
-        ref_num = try_parse_number(ref_clean)
-
+        pred_num, ref_num = parse_number(pred), parse_number(ref_clean)
         if pred_num is not None and ref_num is not None:
             if ref_num == 0:
                 if pred_num == 0:
                     return 1.0
             elif abs(pred_num - ref_num) / abs(ref_num) <= 0.05:
                 return 1.0
-
     return 0.0
 
 
 def anywhere_accuracy(prediction: str, reference: str | list[str]) -> float:
-    """Check if the reference appears anywhere in the prediction."""
-    refs = reference if isinstance(reference, list) else [reference]
+    """Return 1.0 if any reference appears as substring in prediction (case-insensitive)."""
     pred_lower = prediction.lower()
-
-    for ref in refs:
-        if str(ref).lower().strip() in pred_lower:
-            return 1.0
-    return 0.0
+    refs = reference if isinstance(reference, list) else [reference]
+    return 1.0 if any(str(ref).lower().strip() in pred_lower for ref in refs) else 0.0
 
 
 def apply_filter(text: str, filter_config: dict[str, Any]) -> str:
-    """Apply a filter to extract answer from generation."""
+    """Apply regex or take_first filter to extract answer from generation."""
     func = filter_config.get("function", "")
-
     if func == "regex":
-        pattern = filter_config.get("regex_pattern", "")
-        group_select = filter_config.get("group_select", 0)
-        match = re.search(pattern, text)
-        if match:
-            if group_select == -1:
-                groups = match.groups()
-                return groups[-1] if groups else match.group(0)
+        if match := re.search(filter_config.get("regex_pattern", ""), text):
+            group = filter_config.get("group_select", 0)
+            if group == -1:
+                return match.groups()[-1] if match.groups() else match.group(0)
             try:
-                return match.group(group_select)
+                return match.group(group)
             except IndexError:
                 return match.group(0)
-    elif func == "take_first":
-        return text
-
     return text
 
 
-def compute_metrics(
-    instances: list[Instance],
-    config: TaskConfig,
-) -> dict[str, float]:
-    """Compute metrics for all instances."""
+def compute_metrics(instances: list[Instance], config: TaskConfig) -> dict[str, float]:
+    """Compute configured metrics over all instances, returning averages."""
     metrics: dict[str, list[float]] = {}
-
-    # Default metrics based on task
     metric_configs = config.metric_list or [{"metric": "exact_match"}]
 
     for inst in instances:
         response = inst.response or ""
-
-        # Apply filters if specified
         if config.filter_list:
-            for filter_group in config.filter_list:
-                for filter_cfg in filter_group.get("filter", []):
-                    response = apply_filter(response, filter_cfg)
+            for group in config.filter_list:
+                for cfg in group.get("filter", []):
+                    response = apply_filter(response, cfg)
 
-        for metric_cfg in metric_configs:
-            metric_name = metric_cfg.get("metric", "exact_match")
+        for cfg in metric_configs:
+            name = cfg.get("metric", "exact_match")
+            # Normalize function refs like "!function utils.exact_match"
+            if isinstance(name, str):
+                for key in ("exact_match", "relaxed_accuracy", "anywhere_accuracy"):
+                    if key in name:
+                        name = key
+                        break
 
-            # Handle function references (e.g., !function utils.exact_match)
-            if isinstance(metric_name, str):
-                if "exact_match" in metric_name:
-                    metric_name = "exact_match"
-                elif "relaxed_accuracy" in metric_name:
-                    metric_name = "relaxed_accuracy"
-                elif "anywhere_accuracy" in metric_name:
-                    metric_name = "anywhere_accuracy"
-
-            if metric_name == "exact_match":
-                score = exact_match(
-                    response,
-                    inst.target,
-                    ignore_case=metric_cfg.get("ignore_case", False),
-                    ignore_punctuation=metric_cfg.get("ignore_punctuation", False),
-                    regexes_to_ignore=metric_cfg.get("regexes_to_ignore"),
-                )
-            elif metric_name == "relaxed_accuracy":
+            if name == "exact_match":
+                score = exact_match(response, inst.target, cfg.get("ignore_case", False),
+                                    cfg.get("ignore_punctuation", False), cfg.get("regexes_to_ignore"))
+            elif name == "relaxed_accuracy":
                 score = relaxed_accuracy(response, inst.target)
-            elif metric_name == "anywhere_accuracy":
+            elif name == "anywhere_accuracy":
                 score = anywhere_accuracy(response, inst.target)
             else:
-                # Default to exact match for unknown metrics
                 score = exact_match(response, inst.target, ignore_case=True)
 
-            metrics.setdefault(metric_name, []).append(score)
+            metrics.setdefault(name, []).append(score)
 
     return {name: sum(scores) / len(scores) for name, scores in metrics.items() if scores}
 
@@ -580,176 +446,102 @@ def compute_metrics(
 # ============================================================================
 
 class LocalCompletionsAPI:
-    """
-    OpenAI-compatible completions API client.
-    Compatible interface with the original lm_eval implementation.
-    """
+    """OpenAI-compatible completions API client (lm_eval-compatible interface)."""
 
     def __init__(
-        self,
-        base_url: str,
-        model: str = "gpt-3.5-turbo",
-        tokenizer_backend: str | None = None,
-        num_concurrent: int = 1,
-        batch_size: int = 1,
-        max_retries: int = 3,
-        seed: int = 1234,
-        timeout: int = 300,
-        **kwargs: Any,
+        self, base_url: str, model: str = "gpt-3.5-turbo", tokenizer_backend: str | None = None,
+        num_concurrent: int = 1, batch_size: int = 1, max_retries: int = 3,
+        seed: int = 1234, timeout: int = 300, **kwargs: Any,
     ) -> None:
         self.base_url = base_url
         self.model = model
         self._seed = seed
         self._max_gen_toks = 256
         self._concurrent = num_concurrent
-        self._batch_size = batch_size
         self.max_retries = max_retries
         self.timeout = timeout
 
     @property
     def header(self) -> dict[str, str]:
-        """Return headers for API requests."""
-        api_key = getattr(self, "api_key", "")
-        return {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        """Auth header if api_key is set."""
+        return {"Authorization": f"Bearer {k}"} if (k := getattr(self, "api_key", "")) else {}
 
     def _create_payload(
-        self,
-        messages: str | list[str],
-        generate: bool = False,
-        gen_kwargs: dict[str, Any] | None = None,
-        seed: int = 1234,
-        eos: str | None = None,
-        **kwargs: Any,
+        self, messages: str | list[str], generate: bool = False,
+        gen_kwargs: dict[str, Any] | None = None, seed: int = 1234, eos: str | None = None, **kwargs: Any,
     ) -> dict[str, Any]:
-        """Create the request payload."""
+        """Build completions API payload for generate or logprobs mode."""
         gen_kwargs = gen_kwargs or {}
-
         if generate:
             gen_kwargs.pop("do_sample", None)
             max_tokens = gen_kwargs.pop("max_tokens", None) or gen_kwargs.pop("max_gen_toks", self._max_gen_toks)
-            temperature = gen_kwargs.pop("temperature", 0)
-            until = gen_kwargs.pop("until", None)
-            stop = handle_stop_sequences(until)
+            stop = handle_stop_sequences(gen_kwargs.pop("until", None))
             if eos and eos not in stop:
                 stop.append(eos)
-            return {
-                "prompt": messages,
-                "model": self.model,
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "stop": stop if stop else None,
-                "seed": seed,
-                **gen_kwargs,
-            }
-        else:
-            return {
-                "model": self.model,
-                "prompt": messages,
-                "temperature": 0,
-                "max_tokens": 1,
-                "logprobs": 1,
-                "seed": seed,
-                "echo": True,
-            }
+            return {"prompt": messages, "model": self.model, "max_tokens": max_tokens,
+                    "temperature": gen_kwargs.pop("temperature", 0), "stop": stop or None, "seed": seed, **gen_kwargs}
+        return {"model": self.model, "prompt": messages, "temperature": 0,
+                "max_tokens": 1, "logprobs": 1, "seed": seed, "echo": True}
 
     def model_call(
-        self,
-        messages: str | list[str],
-        generate: bool = True,
-        gen_kwargs: dict[str, Any] | None = None,
-        **kwargs: Any,
+        self, messages: str | list[str], generate: bool = True,
+        gen_kwargs: dict[str, Any] | None = None, **kwargs: Any,
     ) -> dict[str, Any] | None:
-        """Make a synchronous API request."""
+        """Synchronous API request."""
         import requests
-
-        gen_kwargs = copy.deepcopy(gen_kwargs) if gen_kwargs else {}
-        payload = self._create_payload(
-            messages,
-            generate=generate,
-            gen_kwargs=gen_kwargs,
-            seed=self._seed,
-            **kwargs,
-        )
-        payload = {k: v for k, v in payload.items() if v is not None}
-
+        payload = {k: v for k, v in self._create_payload(
+            messages, generate, copy.deepcopy(gen_kwargs) if gen_kwargs else {}, self._seed, **kwargs
+        ).items() if v is not None}
         try:
-            response = requests.post(self.base_url, json=payload, headers=self.header)
-            response.raise_for_status()
-            return response.json()
+            resp = requests.post(self.base_url, json=payload, headers=self.header)
+            resp.raise_for_status()
+            return resp.json()
         except Exception as e:
             log.warning(f"Request failed: {e}")
             return None
 
     async def get_batched_requests(
-        self,
-        requests: list[str],
-        cache_keys: list[tuple[str, ...]],
-        generate: bool = True,
-        gen_kwargs: dict[str, Any] | None = None,
-        **kwargs: Any,
+        self, requests: list[str], cache_keys: list[tuple[str, ...]],
+        generate: bool = True, gen_kwargs: dict[str, Any] | None = None, **kwargs: Any,
     ) -> list[list[str] | list[tuple[float, bool]]]:
-        """Make batched async API requests."""
+        """Async batched requests with concurrency control."""
         gen_kwargs = copy.deepcopy(gen_kwargs) if gen_kwargs else {}
-        results: list[Any] = []
-
-        connector = aiohttp.TCPConnector(limit=self._concurrent)
-        timeout_cfg = aiohttp.ClientTimeout(total=self.timeout)
         semaphore = asyncio.Semaphore(self._concurrent)
 
-        async with aiohttp.ClientSession(connector=connector, timeout=timeout_cfg) as session:
-            async def make_single_request(msg: str) -> dict[str, Any] | None:
-                payload = self._create_payload(
-                    msg,
-                    generate=generate,
-                    gen_kwargs=copy.deepcopy(gen_kwargs),
-                    seed=self._seed,
-                    **kwargs,
-                )
-                payload = {k: v for k, v in payload.items() if v is not None}
+        async def make_single(session: aiohttp.ClientSession, msg: str) -> dict[str, Any] | None:
+            payload = {k: v for k, v in self._create_payload(
+                msg, generate, copy.deepcopy(gen_kwargs), self._seed, **kwargs
+            ).items() if v is not None}
+            async with semaphore:
+                try:
+                    async with session.post(self.base_url, json=payload, headers=self.header) as resp:
+                        resp.raise_for_status()
+                        return await resp.json()
+                except Exception as e:
+                    log.warning(f"Async request failed: {e}")
+                    return None
 
-                async with semaphore:
-                    try:
-                        async with session.post(
-                            self.base_url, json=payload, headers=self.header
-                        ) as response:
-                            response.raise_for_status()
-                            return await response.json()
-                    except Exception as e:
-                        log.warning(f"Async request failed: {e}")
-                        return None
+        async with aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(limit=self._concurrent),
+            timeout=aiohttp.ClientTimeout(total=self.timeout)
+        ) as session:
+            responses = await asyncio.gather(*[make_single(session, msg) for msg in requests])
 
-            tasks = [make_single_request(msg) for msg in requests]
-            responses = await asyncio.gather(*tasks)
-
-            for resp in responses:
-                if generate:
-                    results.append([self._parse_generation(resp)])
-                else:
-                    results.append([(0.0, True)])
-
-        return results
+        return [[self._parse_generation(r)] if generate else [(0.0, True)] for r in responses]
 
     @staticmethod
     def _parse_generation(response: dict[str, Any] | None) -> str:
-        """Parse generation from response."""
-        if not response or "choices" not in response:
-            return ""
-        choices = response["choices"]
-        if not choices:
+        """Extract text from completions response."""
+        if not response or not (choices := response.get("choices")):
             return ""
         return choices[0].get("text", "")
 
     @staticmethod
     def parse_generations(outputs: dict | list[dict], **kwargs: Any) -> list[str]:
-        """Parse generations from API response."""
-        res = []
+        """Extract all texts from completions response(s)."""
         if not isinstance(outputs, list):
             outputs = [outputs]
-        for out in outputs:
-            if out and "choices" in out:
-                for choice in out["choices"]:
-                    res.append(choice.get("text", ""))
-        return res
+        return [choice.get("text", "") for out in outputs if out and "choices" in out for choice in out["choices"]]
 
 
 # ============================================================================
@@ -757,59 +549,38 @@ class LocalCompletionsAPI:
 # ============================================================================
 
 async def evaluate_task(
-    task_path: Path,
-    api_config: APIConfig,
-    num_fewshot: int | None = None,
-    limit: int | None = None,
-    seed: int = 42,
+    task_path: Path, api_config: APIConfig, num_fewshot: int | None = None,
+    limit: int | None = None, seed: int = 42,
 ) -> EvalResult:
-    """Evaluate a single task."""
+    """Load task config, build instances, run generation, compute metrics."""
     config = TaskConfig.from_yaml(task_path)
     log.info(f"Evaluating task: {config.task} (multimodal: {config.is_multimodal})")
-
     if num_fewshot is not None:
         config.num_fewshot = num_fewshot
 
-    # Load dataset
-    dataset = datasets.load_dataset(
-        path=config.dataset_path,
-        name=config.dataset_name,
-    )
+    # Use streaming when limit is specified to avoid downloading entire dataset
+    if limit and config.num_fewshot == 0:
+        stream = datasets.load_dataset(config.dataset_path, config.dataset_name, split=config.test_split, streaming=True)
+        test_docs = list(stream.take(limit))
+        fewshot_context = ""
+    else:
+        dataset = datasets.load_dataset(path=config.dataset_path, name=config.dataset_name)
+        test_docs = list(dataset[config.test_split])[:limit] if limit else list(dataset[config.test_split])
+        rng = random.Random(seed)
+        fewshot_context = build_fewshot_context(config, get_fewshot_examples(config, dataset, config.num_fewshot, rng))
 
-    test_docs = list(dataset[config.test_split])
-    if limit:
-        test_docs = test_docs[:limit]
-
-    # Build few-shot context (text only, no images in few-shot)
-    rng = random.Random(seed)
-    fewshot_examples = get_fewshot_examples(config, dataset, config.num_fewshot, rng)
-    fewshot_context = build_fewshot_context(config, fewshot_examples)
-
-    # Build instances
     instances = build_instances(config, test_docs, fewshot_context)
     log.info(f"Built {len(instances)} instances")
 
-    # Run generation
     instances = await run_generation(instances, api_config, is_multimodal=config.is_multimodal)
-
-    # Compute metrics
-    metrics = compute_metrics(instances, config)
-
-    return EvalResult(
-        task=config.task,
-        metrics=metrics,
-        num_samples=len(instances),
-    )
+    return EvalResult(task=config.task, metrics=compute_metrics(instances, config), num_samples=len(instances))
 
 
 async def evaluate_tasks(
-    task_paths: list[Path],
-    api_config: APIConfig,
-    num_fewshot: int | None = None,
-    limit: int | None = None,
-    seed: int = 42,
+    task_paths: list[Path], api_config: APIConfig, num_fewshot: int | None = None,
+    limit: int | None = None, seed: int = 42,
 ) -> dict[str, EvalResult]:
-    """Evaluate multiple tasks."""
+    """Evaluate multiple tasks sequentially, logging results."""
     results = {}
     for path in task_paths:
         try:
@@ -824,24 +595,17 @@ async def evaluate_tasks(
 
 
 def find_task_configs(tasks_dir: Path, task_names: list[str]) -> list[Path]:
-    """Find task config files by name."""
+    """Locate YAML configs by name: direct path, exact match, or first glob match."""
     paths = []
     for name in task_names:
         if Path(name).exists():
             paths.append(Path(name))
             continue
-
         matches = list(tasks_dir.rglob(f"{name}.yaml")) + list(tasks_dir.rglob(f"{name}/*.yaml"))
         if matches:
-            for m in matches:
-                if m.stem == name:
-                    paths.append(m)
-                    break
-            else:
-                paths.append(matches[0])
+            paths.append(next((m for m in matches if m.stem == name), matches[0]))
         else:
             log.warning(f"Task not found: {name}")
-
     return paths
 
 
@@ -849,10 +613,9 @@ def find_task_configs(tasks_dir: Path, task_names: list[str]) -> list[Path]:
 # CLI
 # ============================================================================
 
-def main():
-    """CLI entry point."""
+def main() -> int:
+    """CLI: evaluate tasks against an OpenAI-compatible API."""
     import argparse
-
     parser = argparse.ArgumentParser(description="Minimal LM Evaluation Harness")
     parser.add_argument("--tasks", type=str, required=True, help="Comma-separated task names")
     parser.add_argument("--model", type=str, required=True, help="Model name")
@@ -864,47 +627,24 @@ def main():
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--tasks_dir", type=str, default="lm_eval/tasks", help="Tasks directory")
     parser.add_argument("--output", type=str, default=None, help="Output JSON file")
-
     args = parser.parse_args()
 
-    tasks_dir = Path(args.tasks_dir)
-    task_names = [t.strip() for t in args.tasks.split(",")]
-    task_paths = find_task_configs(tasks_dir, task_names)
-
+    task_paths = find_task_configs(Path(args.tasks_dir), [t.strip() for t in args.tasks.split(",")])
     if not task_paths:
         log.error("No valid tasks found")
         return 1
 
-    api_config = APIConfig(
-        base_url=args.base_url,
-        model=args.model,
-        api_key=args.api_key,
-        num_concurrent=args.num_concurrent,
-    )
-
-    results = asyncio.run(evaluate_tasks(
-        task_paths,
-        api_config,
-        num_fewshot=args.num_fewshot,
-        limit=args.limit,
-        seed=args.seed,
-    ))
+    api_config = APIConfig(base_url=args.base_url, model=args.model, api_key=args.api_key, num_concurrent=args.num_concurrent)
+    results = asyncio.run(evaluate_tasks(task_paths, api_config, args.num_fewshot, args.limit, args.seed))
 
     output = {
         "results": {name: {"metrics": r.metrics, "num_samples": r.num_samples} for name, r in results.items()},
-        "config": {
-            "model": args.model,
-            "num_fewshot": args.num_fewshot,
-            "limit": args.limit,
-        }
+        "config": {"model": args.model, "num_fewshot": args.num_fewshot, "limit": args.limit},
     }
-
     print(json.dumps(output, indent=2))
-
     if args.output:
         with open(args.output, "w") as f:
             json.dump(output, f, indent=2)
-
     return 0
 
 
