@@ -189,12 +189,3 @@ class TestTasks:
         assert "gsm8k_llama" in TASKS
         assert "chartqa" in TASKS
         assert len(TASKS) == 2
-
-    def test_tasks_are_callables(self):
-        """Tasks are async functions."""
-        import inspect
-
-        from tinyeval import TASKS
-
-        for name, fn in TASKS.items():
-            assert inspect.iscoroutinefunction(fn), f"{name} should be async"

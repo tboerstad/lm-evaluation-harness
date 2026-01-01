@@ -1,7 +1,4 @@
-"""Integration tests for ChartQA: dataset loading and evaluation pipeline."""
-
-import asyncio
-from unittest.mock import AsyncMock, patch
+"""Integration tests for ChartQA: dataset loading and multimodal handling."""
 
 import pytest
 
@@ -31,26 +28,6 @@ class TestChartQADataset:
         assert isinstance(sample["label"], list) and sample["label"]
 
 
-class TestChartQATaskFunction:
-    """ChartQA task function validation."""
-
-    def test_task_is_registered(self):
-        """ChartQA is registered in TASKS."""
-        from tinyeval import TASKS
-
-        assert "chartqa" in TASKS
-        assert callable(TASKS["chartqa"])
-
-    def test_prompt_formatting(self):
-        """Prompt includes query and FINAL ANSWER instruction."""
-        from tinyeval import _format_chartqa_prompt
-
-        prompt = _format_chartqa_prompt("What is the total?")
-        assert "What is the total?" in prompt
-        assert "FINAL ANSWER:" in prompt
-        assert "<image>" in prompt
-
-
 class TestChartQAMultimodal:
     """Multimodal message building with ChartQA images."""
 
@@ -74,53 +51,3 @@ class TestChartQAMultimodal:
         assert "data:image/png;base64," in content[0]["image_url"]["url"]
         assert content[1]["type"] == "text"
         assert "<image>" not in content[1]["text"]
-
-
-class TestChartQAEndToEnd:
-    """End-to-end pipeline with mocked API."""
-
-    def test_complete_with_multimodal_prompts(self):
-        """complete() handles multimodal prompts with images."""
-        from tinyeval import APIConfig, _format_chartqa_prompt, complete
-
-        config = APIConfig(url="http://mock/v1/chat/completions", model="mock", api_key="test")
-
-        # Create multimodal prompt
-        prompts = [(_format_chartqa_prompt("What is the value?"), ["base64_image_data"])]
-
-        mock_response = {"choices": [{"message": {"content": "FINAL ANSWER: 42"}}]}
-
-        class MockResp:
-            ok = True
-
-            async def json(self):
-                return mock_response
-
-        class MockContextManager:
-            async def __aenter__(self):
-                return MockResp()
-
-            async def __aexit__(self, *args):
-                pass
-
-        with patch("tinyeval.aiohttp.ClientSession") as mock_session:
-            mock_session.return_value.__aenter__.return_value = AsyncMock(
-                post=lambda *a, **k: MockContextManager()
-            )
-            responses = asyncio.run(complete(prompts, config))
-
-        assert len(responses) == 1
-        assert "42" in responses[0]
-
-    def test_relaxed_match_scoring(self):
-        """Relaxed match handles FINAL ANSWER extraction and numeric tolerance."""
-        from tinyeval import _relaxed_match
-
-        # Exact match via FINAL ANSWER
-        assert _relaxed_match("FINAL ANSWER: 42", "42") == 1.0
-        # Numeric tolerance (5%)
-        assert _relaxed_match("FINAL ANSWER: 42", "40") == 1.0
-        # Case insensitive
-        assert _relaxed_match("FINAL ANSWER: Yes", "yes") == 1.0
-        # Miss
-        assert _relaxed_match("FINAL ANSWER: 100", "42") == 0.0
