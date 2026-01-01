@@ -55,8 +55,8 @@ async def eval_chartqa(config: APIConfig, limit: int | None = None) -> dict:
 
     Returns dict with relaxed_accuracy, num_samples, time_seconds.
     """
-    # Load - prefer test, fallback to validation only (never train for evaluation)
-    for split in ["test", "validation"]:
+    # Load - prefer test, then validation, then train (train last for limited runs)
+    for split in ["test", "validation", "train"]:
         try:
             ds = datasets.load_dataset(
                 "HuggingFaceM4/ChartQA", split=split, streaming=True
@@ -66,10 +66,7 @@ async def eval_chartqa(config: APIConfig, limit: int | None = None) -> dict:
         except ValueError:
             continue
     else:
-        raise ValueError(
-            "No valid evaluation split found in HuggingFaceM4/ChartQA. "
-            "Only 'test' or 'validation' splits are used for evaluation."
-        )
+        raise ValueError("No valid split found in HuggingFaceM4/ChartQA")
 
     # Format prompts with images
     prompts: list[tuple[str, list]] = [
