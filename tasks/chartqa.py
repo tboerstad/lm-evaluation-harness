@@ -10,11 +10,14 @@ Responsibilities:
 
 from __future__ import annotations
 
+import logging
 import re
 
 import datasets
 
 from core import APIConfig, _normalize, run_task
+
+logger = logging.getLogger(__name__)
 
 # Pre-compiled regex patterns for _relaxed_match
 _FINAL_ANSWER_RE = re.compile(r"FINAL ANSWER:\s*(.+?)(?:\n|$)", re.IGNORECASE)
@@ -92,7 +95,7 @@ async def eval_chartqa(config: APIConfig, limit: int | None = None) -> dict:
         / len(docs),
         "relaxed_accuracy": correct / len(docs),
     }
-    print(f"chartqa: {metrics} ({elapsed:.2f}s)")
+    logger.info("chartqa: %s (%.2fs)", metrics, elapsed)
 
     return {
         "task": "chartqa",

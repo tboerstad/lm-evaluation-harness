@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import logging
 import re
 import time
 from collections.abc import Callable
@@ -22,6 +23,8 @@ from typing import Any
 
 import aiohttp
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 # Pre-compiled regex patterns for _normalize
 _NORMALIZE_CURRENCY_RE = re.compile(r"[$,]")
@@ -45,7 +48,7 @@ class APIConfig:
 async def _request(
     session: aiohttp.ClientSession,
     url: str,
-    payload: dict,
+    payload: dict[str, Any],
     semaphore: asyncio.Semaphore,
     max_retries: int,
 ) -> str:
@@ -60,11 +63,13 @@ async def _request(
                         .get("message", {})
                         .get("content", "")
                     )
-                print(f"Request failed (attempt {attempt + 1}): {await resp.text()}")
+                logger.warning(
+                    "Request failed (attempt %d): %s", attempt + 1, await resp.text()
+                )
         except asyncio.CancelledError:
             raise  # Allow the program to exit immediately on Ctrl+C
-        except Exception as e:
-            print(f"Request error (attempt {attempt + 1}): {e}")
+        except (aiohttp.ClientError, TimeoutError) as e:
+            logger.warning("Request error (attempt %d): %s", attempt + 1, e)
         if attempt < max_retries - 1:
             await asyncio.sleep(2**attempt)
     raise RuntimeError(
@@ -131,7 +136,7 @@ async def complete(
         return list(await asyncio.gather(*tasks))
 
 
-def _build_vision_message(text: str, images: list) -> list[dict]:
+def _build_vision_message(text: str, images: list[Any]) -> list[dict[str, Any]]:
     """Build OpenAI vision API message."""
     content: list[dict[str, Any]] = []
     for img in images:
@@ -173,15 +178,15 @@ def _normalize(text: str) -> str:
 async def run_task(
     task_name: str,
     config: APIConfig,
-    docs: list,
-    prompt_fn: Callable,
+    docs: list[dict[str, Any]],
+    prompt_fn: Callable[[dict[str, Any]], str | tuple[str, list[Any]]],
     max_tokens: int = 512,
     stop: list[str] | None = None,
 ) -> tuple[list[str], float]:
     """Shared execution loop: Format -> Timer -> Request -> Timer."""
     prompts = [prompt_fn(d) for d in docs]
 
-    print(f"Evaluating: {task_name} ({len(docs)} samples)")
+    logger.info("Evaluating: %s (%d samples)", task_name, len(docs))
     t0 = time.perf_counter()
     responses = await complete(prompts, config, max_tokens=max_tokens, stop=stop)
     elapsed = time.perf_counter() - t0

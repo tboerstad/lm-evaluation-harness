@@ -48,30 +48,24 @@ python tinyeval.py \
 
 ```python
 import asyncio
-from tinyeval import APIConfig, TASKS, build_instances, run_generation, compute_metrics, load_docs
+from core import APIConfig
+from tasks.gsm8k import eval_gsm8k
+from tasks.chartqa import eval_chartqa
 
-# Get built-in task config
-config = TASKS["gsm8k_llama"]
-
-# Load dataset
-docs = load_docs(config.dataset_path, config.dataset_name, limit=100)
-
-# Build evaluation instances
-instances = build_instances(config, docs)
-
-# Configure API
-api_config = APIConfig(
-    base_url="http://localhost:8000/v1/chat/completions",
+# Configure API endpoint
+config = APIConfig(
+    url="http://localhost:8000/v1/chat/completions",
     model="gpt-4",
     num_concurrent=8
 )
 
-# Run evaluation
-instances = asyncio.run(run_generation(instances, api_config, config))
+# Run GSM8K evaluation (text)
+results = asyncio.run(eval_gsm8k(config, limit=100))
+print(f"GSM8K: {results['metrics']}")
 
-# Compute metrics
-metrics = compute_metrics(instances, config)
-print(f"Results: {metrics}")
+# Run ChartQA evaluation (multimodal)
+results = asyncio.run(eval_chartqa(config, limit=100))
+print(f"ChartQA: {results['metrics']}")
 ```
 
 ## CLI Arguments
