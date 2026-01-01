@@ -4,7 +4,6 @@ Tiny Eval - A minimal harness for evaluating LLMs via OpenAI-compatible APIs.
 
 ## Features
 
-- **Single-file implementation** (~400 lines) - easy to understand and modify
 - **API-only** - works with any OpenAI-compatible endpoint (vLLM, TGI, Ollama, etc.)
 - **Async HTTP** - concurrent requests with configurable parallelism
 - **Two built-in tasks** - GSM8K (text) and ChartQA (multimodal)
@@ -15,8 +14,6 @@ Tiny Eval - A minimal harness for evaluating LLMs via OpenAI-compatible APIs.
 ```bash
 pip install -e .
 ```
-
-Or just copy `tinyeval.py` - it's a single file.
 
 ## Usage
 
