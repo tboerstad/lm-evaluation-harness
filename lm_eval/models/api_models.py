@@ -38,7 +38,7 @@ from io import BytesIO
 from lm_eval import utils
 from lm_eval.api.instance import Instance
 from lm_eval.api.model import TemplateLM
-from lm_eval.models.utils import Collator, chunks, configure_pad_token
+from lm_eval.models.utils import Collator, chunks
 
 
 if TYPE_CHECKING:
@@ -113,9 +113,8 @@ class TemplateAPI(TemplateLM):
         # Loglikelihood tasks require a tokenizer to calculate context lengths,
         # however the requests can be sent as a string if the API doesn't support token inputs.
         # use tokenized_requests=False
-        tokenizer_backend: Optional[
-            Literal["tiktoken", "huggingface", "remote", "None", "none"]
-        ] = "huggingface",
+        # API-only mode: only None tokenizer backend is supported
+        tokenizer_backend: Optional[Literal["None", "none"]] = None,
         truncate: bool = False,
         # number of concurrent requests. More useful if not batching
         num_concurrent: int = 1,
@@ -190,63 +189,10 @@ class TemplateAPI(TemplateLM):
         self.timeout = int(timeout)
         self.max_images = int(max_images)
 
-        eval_logger.info(f"Using tokenizer {self.tokenizer_backend}")
-        if self.tokenizer_backend is None:
-            self.tokenizer = None
-            self.tokenized_requests = False
-        else:
-            if self.tokenizer is None:
-                if self.tokenizer_backend == "huggingface":
-                    import transformers
-
-                    self.tokenizer = transformers.AutoTokenizer.from_pretrained(
-                        self.tokenizer if self.tokenizer else self.model,
-                        trust_remote_code=trust_remote_code,
-                        revision=revision,
-                        use_fast=use_fast_tokenizer,
-                    )
-                    # Not used as the API will handle padding but to mirror the behavior of the HFLM
-                    self.tokenizer = configure_pad_token(self.tokenizer)
-                elif self.tokenizer_backend == "tiktoken":
-                    try:
-                        import tiktoken
-
-                        self.tokenizer = tiktoken.encoding_for_model(self.model)
-                    except ModuleNotFoundError as e:
-                        raise ModuleNotFoundError(
-                            "Attempted to use 'openai' LM type, but the package `tiktoken` is not installed. "
-                            "Please install it via `pip install lm-eval[api]` or `pip install -e .[api]`."
-                        ) from e
-                    if "openai" not in self.base_url:
-                        eval_logger.warning(
-                            f"Passed `base_url={self.base_url}` but using (OpenAI) Tiktoken tokenizer backend. "
-                            "Pass `tokenizer_backend=huggingface` and provide the HF tokenizer name if your model does not use Tiktoken."
-                        )
-                elif self.tokenizer_backend == "remote":
-                    from lm_eval.utils import RemoteTokenizer
-
-                    if not self.base_url:
-                        raise ValueError(
-                            "base_url is required for remote tokenizer backend"
-                        )
-                    self.tokenizer = RemoteTokenizer(
-                        self.base_url,
-                        self.timeout,
-                        self.verify_certificate,
-                        self.ca_cert_path,
-                        self.auth_token,
-                    )
-                    eval_logger.info(f"Using remote tokenizer from {self.base_url}")
-            else:
-                import transformers
-
-                assert isinstance(tokenizer, str), "tokenizer must be a string"
-                self.tokenizer = transformers.AutoTokenizer.from_pretrained(
-                    tokenizer,
-                    trust_remote_code=trust_remote_code,
-                    revision=revision,
-                    use_fast=use_fast_tokenizer,
-                )
+        # API-only mode: no local tokenizer support
+        self.tokenizer = None
+        self.tokenized_requests = False
+        eval_logger.info("Using API-only mode (no local tokenizer)")
 
     @abc.abstractmethod
     def _create_payload(
@@ -351,48 +297,23 @@ class TemplateAPI(TemplateLM):
 
     @cached_property
     def eot_token_id(self) -> Optional[int]:
-        if self.tokenizer is None:
-            return None
-        else:
-            if self.tokenizer_backend == "huggingface":
-                return self.tokenizer.eos_token_id
-            elif self.tokenizer_backend == "tiktoken":
-                return self.tokenizer.eot_token
-            elif self.tokenizer_backend == "remote":
-                return self.tokenizer.eos_token_id
+        # API-only mode: no local tokenizer
+        return None
 
     @cached_property
     def eos_string(self) -> Optional[str]:
         if self._eos_string:
             return self._eos_string
-        elif self.tokenizer is not None:
-            if self.tokenizer_backend == "huggingface":
-                return self.tokenizer.eos_token
-            elif self.tokenizer_backend == "tiktoken":
-                return self.tokenizer.decode([self.tokenizer.eot_token])
-            elif self.tokenizer_backend == "remote":
-                return self.tokenizer.eos_token
-        else:
-            eval_logger.warning(
-                "Cannot determine EOS string to pass to stop sequence. Manually set by passing `eos_string` to model_args."
-            )
-            return None
+        eval_logger.warning(
+            "Cannot determine EOS string to pass to stop sequence. Manually set by passing `eos_string` to model_args."
+        )
+        return None
 
     @cached_property
     def prefix_token_id(self) -> Optional[int]:
-        if self.tokenizer is None:
-            return None
-        else:
-            if self.custom_prefix_token_id is not None:
-                return self.custom_prefix_token_id
-            if self.tokenizer_backend == "huggingface":
-                if self.tokenizer.bos_token_id is not None:
-                    return self.tokenizer.bos_token_id
-                return self.tokenizer.eos_token_id
-            elif self.tokenizer_backend == "remote":
-                return self.tokenizer.bos_token_id or self.tokenizer.eos_token_id
-            else:
-                return self.tokenizer.eot_token
+        if self.custom_prefix_token_id is not None:
+            return self.custom_prefix_token_id
+        return None
 
     def tok_encode(
         self,
@@ -402,54 +323,12 @@ class TemplateAPI(TemplateLM):
         truncation: bool = False,
         **kwargs,
     ) -> Union[List[List[int]], List[int], List[str]]:
-        if self.tokenizer_backend is None:
-            return [string]
-        elif self.tokenizer_backend == "huggingface":
-            # by default for CausalLM - false or self.add_bos_token is set
-            if not add_special_tokens:
-                add_special_tokens = False or self.add_bos_token
-            encoding: Union[List[List[int]], List[int]] = self.tokenizer(
-                string,
-                add_special_tokens=add_special_tokens,
-                truncation=truncation,
-                return_attention_mask=False,
-            ).input_ids
-
-            # left-truncate the encoded context to be at most `left_truncate_len` tokens long
-            if left_truncate_len:
-                if not isinstance(string, str):
-                    encoding = [enc[-left_truncate_len:] for enc in encoding]
-                else:
-                    encoding = encoding[-left_truncate_len:]
-
-            return encoding
-        elif self.tokenizer_backend == "remote":
-            if isinstance(string, str):
-                encoding = self.tokenizer.encode(string)
-            else:
-                encoding = [self.tokenizer.encode(s) for s in string]
-
-            if left_truncate_len:
-                if isinstance(string, str):
-                    encoding = encoding[-left_truncate_len:]
-                else:
-                    encoding = [enc[-left_truncate_len:] for enc in encoding]
-
-            return encoding
-        else:
-            try:
-                encoding = self.tokenizer.encode(string)
-            except Exception:
-                encoding = self.tokenizer.encode_batch(string)
-            return encoding
+        # API-only mode: return string as-is, API will handle tokenization
+        return [string]
 
     def decode_batch(self, tokens: List[List[int]]) -> List[str]:
-        if self.tokenizer_backend == "huggingface":
-            return self.tokenizer.batch_decode(tokens)
-        elif self.tokenizer_backend == "tiktoken":
-            return self.tokenizer.decode_batch(tokens)
-        elif self.tokenizer_backend == "remote":
-            return self.tokenizer.batch_decode(tokens)
+        # API-only mode: not used
+        return [str(t) for t in tokens]
 
     def model_call(
         self,
