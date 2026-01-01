@@ -53,32 +53,29 @@ GSM8K_STOP = [
 ]
 
 
+_GSM8K_TEMPLATE = (
+    "Given the following problem, reason and give a final answer to the problem.\n"
+    "Problem: {question}\n"
+    'Your response should end with "The final answer is [answer]" where [answer] is the response to the problem.'
+)
+
+
 def _format_gsm8k_prompt(question: str) -> str:
     """Format GSM8K prompt with few-shot examples."""
-    parts = []
-    for q, a in GSM8K_FEWSHOT:
-        parts.append(
-            f"Given the following problem, reason and give a final answer to the problem.\n"
-            f"Problem: {q}\n"
-            f'Your response should end with "The final answer is [answer]" where [answer] is the response to the problem.\n'
-            f" {a}"
-        )
-    parts.append(
-        f"Given the following problem, reason and give a final answer to the problem.\n"
-        f"Problem: {question}\n"
-        f'Your response should end with "The final answer is [answer]" where [answer] is the response to the problem.\n'
-    )
+    parts = [_GSM8K_TEMPLATE.format(question=q) + f"\n {a}" for q, a in GSM8K_FEWSHOT]
+    parts.append(_GSM8K_TEMPLATE.format(question=question))
     return "\n\n".join(parts)
+
+
+_NUM_PATTERN = r"-?[$0-9.,]{2,}|-?[0-9]+"
 
 
 def _extract_gsm8k_answer(response: str) -> str:
     """Extract numeric answer from GSM8K response."""
-    if match := re.search(
-        r"The final answer is ((-?[$0-9.,]{2,})|(-?[0-9]+))", response
-    ):
-        return match.groups()[-1] or match.group(1)
-    if match := re.search(r"(-?[$0-9.,]{2,})|(-?[0-9]+)", response):
-        return match.groups()[-1] or match.group(1)
+    if match := re.search(rf"The final answer is ({_NUM_PATTERN})", response):
+        return match.group(1)
+    if match := re.search(rf"({_NUM_PATTERN})", response):
+        return match.group(1)
     return response
 
 

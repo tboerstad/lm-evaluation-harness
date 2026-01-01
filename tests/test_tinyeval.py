@@ -18,6 +18,26 @@ from tasks.chartqa import _format_chartqa_prompt, _relaxed_match
 from tasks.gsm8k import _extract_gsm8k_answer, _format_gsm8k_prompt
 
 
+def _make_mock_session(response_data: dict):
+    """Create a mock aiohttp session that returns the given response."""
+
+    class MockResp:
+        ok = True
+
+        async def json(self):
+            return response_data
+
+    class MockContextManager:
+        async def __aenter__(self):
+            return MockResp()
+
+        async def __aexit__(self, *args):
+            pass
+
+    mock = AsyncMock(post=lambda *a, **k: MockContextManager())
+    return mock
+
+
 class TestImageHandling:
     """Image encoding and multimodal message building."""
 
@@ -105,57 +125,22 @@ class TestHTTPClient:
     def test_complete_text_prompts(self):
         """complete() handles text prompts and returns responses."""
         config = APIConfig(url="http://test.com/v1/chat/completions", model="gpt-4")
-        mock_response = {"choices": [{"message": {"content": "The answer is 42"}}]}
-
-        class MockResp:
-            ok = True
-
-            async def json(self):
-                return mock_response
-
-        class MockContextManager:
-            async def __aenter__(self):
-                return MockResp()
-
-            async def __aexit__(self, *args):
-                pass
+        response = {"choices": [{"message": {"content": "The answer is 42"}}]}
 
         with patch("core.aiohttp.ClientSession") as mock_session:
-            mock_session.return_value.__aenter__.return_value = AsyncMock(
-                post=lambda *a, **k: MockContextManager()
-            )
+            mock_session.return_value.__aenter__.return_value = _make_mock_session(response)
             responses = asyncio.run(complete(["Test prompt"], config))
 
         assert responses[0] == "The answer is 42"
 
     def test_complete_multimodal_prompts(self):
         """complete() handles (text, images) tuples for multimodal."""
-        config = APIConfig(
-            url="http://test.com/v1/chat/completions", model="gpt-4-vision"
-        )
-        mock_response = {"choices": [{"message": {"content": "I see a chart"}}]}
-
-        class MockResp:
-            ok = True
-
-            async def json(self):
-                return mock_response
-
-        class MockContextManager:
-            async def __aenter__(self):
-                return MockResp()
-
-            async def __aexit__(self, *args):
-                pass
+        config = APIConfig(url="http://test.com/v1/chat/completions", model="gpt-4-vision")
+        response = {"choices": [{"message": {"content": "I see a chart"}}]}
 
         with patch("core.aiohttp.ClientSession") as mock_session:
-            mock_session.return_value.__aenter__.return_value = AsyncMock(
-                post=lambda *a, **k: MockContextManager()
-            )
-            # Multimodal prompt as tuple (text, images)
-            responses = asyncio.run(
-                complete([("Describe this chart", ["base64img"])], config)
-            )
+            mock_session.return_value.__aenter__.return_value = _make_mock_session(response)
+            responses = asyncio.run(complete([("Describe this chart", ["base64img"])], config))
 
         assert responses[0] == "I see a chart"
 
