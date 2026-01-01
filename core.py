@@ -16,7 +16,6 @@ from PIL import Image
 
 # Pre-compiled regex patterns for _normalize
 _NORMALIZE_CURRENCY_RE = re.compile(r"[$,]")
-_NORMALIZE_THOUGHT_RE = re.compile(r"(?s).*#### ")
 _NORMALIZE_END_RE = re.compile(r"\.$")
 
 
@@ -156,7 +155,6 @@ def _encode_image(image: Any) -> str:
 def _normalize(text: str) -> str:
     """Normalize text for comparison."""
     text = _NORMALIZE_CURRENCY_RE.sub("", text)
-    text = _NORMALIZE_THOUGHT_RE.sub("", text)
     text = _NORMALIZE_END_RE.sub("", text)
     return text.lower().strip()
 

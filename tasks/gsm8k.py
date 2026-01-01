@@ -8,6 +8,9 @@ import datasets
 
 from core import APIConfig, _normalize, run_task
 
+# GSM8K-specific: strip chain-of-thought before "#### " delimiter
+_NORMALIZE_THOUGHT_RE = re.compile(r"(?s).*#### ")
+
 GSM8K_FEWSHOT = [
     (
         "There are 15 trees in the grove. Grove workers will plant trees in the grove today. After they are done, there will be 21 trees. How many trees did the grove workers plant today?",
@@ -109,8 +112,12 @@ async def eval_gsm8k(config: APIConfig, limit: int | None = None) -> dict:
         stop=GSM8K_STOP,
     )
 
+    def normalize_gsm8k(text: str) -> str:
+        """GSM8K normalization: strip thought chain before #### then apply standard normalize."""
+        return _normalize(_NORMALIZE_THOUGHT_RE.sub("", text))
+
     correct = sum(
-        _normalize(_extract_gsm8k_answer(r)) == _normalize(t)
+        normalize_gsm8k(_extract_gsm8k_answer(r)) == normalize_gsm8k(t)
         for r, t in zip(responses, targets)
     )
 
