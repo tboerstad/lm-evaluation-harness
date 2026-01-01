@@ -27,10 +27,11 @@ dependencies = [
 tinyeval = "tinyeval:main"
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-cov", "ruff"]
+dev = ["pytest", "pytest-cov", "ruff", "pre-commit"]
 
 [tool.setuptools]
 py-modules = ["tinyeval"]
+packages = ["tasks"]
 
 [tool.ruff.lint]
 extend-select = ["E", "F", "I", "UP"]
