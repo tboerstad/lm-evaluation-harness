@@ -226,7 +226,6 @@ async def run_task(
     responses = await complete(prompts, config)
     elapsed = time.perf_counter() - t0
 
-    # Score each response
     scores = [task.score(r, s.target) for r, s in zip(responses, samples)]
     accuracy = sum(scores) / len(samples) if samples else 0.0
 
