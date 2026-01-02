@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from io import BytesIO
 from typing import Any, TypedDict
 
-import aiohttp
+import httpx
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -100,25 +100,21 @@ class APIConfig:
 
 
 async def _request(
-    session: aiohttp.ClientSession,
+    client: httpx.AsyncClient,
     url: str,
     payload: dict[str, Any],
-    semaphore: asyncio.Semaphore,
     max_retries: int,
 ) -> str:
     """Single request with retries. Raises RuntimeError if all retries fail."""
     for attempt in range(max_retries):
         try:
-            async with semaphore, session.post(url, json=payload) as resp:
-                if resp.ok:
-                    data = await resp.json()
-                    return data["choices"][0]["message"]["content"]
-                logger.warning(
-                    "Request failed (attempt %d): %s", attempt + 1, await resp.text()
-                )
+            resp = await client.post(url, json=payload)
+            if resp.is_success:
+                return resp.json()["choices"][0]["message"]["content"]
+            logger.warning("Request failed (attempt %d): %s", attempt + 1, resp.text)
         except asyncio.CancelledError:
             raise  # Allow the program to exit immediately on Ctrl+C
-        except (aiohttp.ClientError, TimeoutError) as e:
+        except httpx.HTTPError as e:
             logger.warning("Request error (attempt %d): %s", attempt + 1, e)
         if attempt < max_retries - 1:
             await asyncio.sleep(2**attempt)
@@ -147,15 +143,12 @@ async def complete(
     if config.api_key:
         headers["Authorization"] = f"Bearer {config.api_key}"
 
-    semaphore = asyncio.Semaphore(config.num_concurrent)
-    connector = aiohttp.TCPConnector(limit=config.num_concurrent)
-
-    async with aiohttp.ClientSession(
-        connector=connector,
-        timeout=aiohttp.ClientTimeout(total=config.timeout),
+    async with httpx.AsyncClient(
+        limits=httpx.Limits(max_connections=config.num_concurrent),
+        timeout=httpx.Timeout(config.timeout),
         headers=headers,
         trust_env=True,
-    ) as session:
+    ) as client:
         tasks = []
         for prompt in prompts:
             if isinstance(prompt, tuple):
@@ -171,9 +164,7 @@ async def complete(
                 **config.gen_kwargs,
             }
 
-            tasks.append(
-                _request(session, config.url, payload, semaphore, config.max_retries)
-            )
+            tasks.append(_request(client, config.url, payload, config.max_retries))
 
         return list(await asyncio.gather(*tasks))
 

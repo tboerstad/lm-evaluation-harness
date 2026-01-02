@@ -18,7 +18,7 @@ dependencies = [
     # Dataset loading (HuggingFace datasets for benchmarks)
     "datasets>=2.16.0,<4.0",
     # HTTP client
-    "aiohttp",
+    "httpx",
     # Image handling (for multimodal tasks)
     "pillow",
 ]

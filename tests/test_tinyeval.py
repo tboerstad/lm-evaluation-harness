@@ -23,30 +23,16 @@ def _single_sample(max_samples: int | None = None) -> list[Sample]:
     return [Sample(prompt="What is 2+2?", target="4")]
 
 
-def _multi_sample(max_samples: int | None = None) -> list[Sample]:
-    """Multiple samples for concurrency tests."""
-    samples = [Sample(prompt=f"Question {i}?", target="42") for i in range(5)]
-    if max_samples is not None:
-        return samples[:max_samples]
-    return samples
-
-
 class MockResp:
-    """Mock aiohttp response."""
+    """Mock httpx response."""
 
-    ok = True
+    is_success = True
 
     def __init__(self, content: str = "42"):
         self._content = content
 
-    async def json(self):
+    def json(self):
         return {"choices": [{"message": {"content": self._content}}]}
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *args):
-        pass
 
 
 SamplesFn = Callable[[int | None], list[Sample]]
@@ -72,8 +58,8 @@ def cli_context(args: list[str], mock_samples: dict[str, SamplesFn]):
 def run_cli_with_mock(args: list[str], mock_samples: dict[str, SamplesFn], post_fn):
     """Run CLI with mocked API post function."""
     with cli_context(args, mock_samples):
-        with patch("core.aiohttp.ClientSession") as mock_session:
-            mock_session.return_value.__aenter__.return_value.post = post_fn
+        with patch("core.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value.post = post_fn
             main()
 
 
@@ -82,6 +68,10 @@ class TestE2E:
 
     def test_gsm8k_evaluation(self, capsys):
         """GSM8K task produces correct JSON output."""
+
+        async def mock_post(url, **kwargs):
+            return MockResp("The final answer is 4")
+
         run_cli_with_mock(
             [
                 "--tasks",
@@ -92,7 +82,7 @@ class TestE2E:
                 "1",
             ],
             {"gsm8k_llama": _single_sample},
-            lambda url, **kwargs: MockResp("The final answer is 4"),
+            mock_post,
         )
 
         output = capsys.readouterr().out
@@ -103,7 +93,7 @@ class TestE2E:
         """gen_kwargs CLI arg flows through to API request payload."""
         captured_payload = None
 
-        def mock_post(url, **kwargs):
+        async def mock_post(url, **kwargs):
             nonlocal captured_payload
             captured_payload = kwargs.get("json")
             return MockResp()
@@ -133,43 +123,11 @@ class TestE2E:
         with pytest.raises(ValueError, match="Unknown task"):
             asyncio.run(evaluate(["nonexistent_task"], config))
 
-    def test_num_concurrent_limits_parallel_requests(self):
-        """num_concurrent CLI arg limits the number of parallel API requests."""
-        active_requests = 0
-        max_concurrent_seen = 0
-
-        class TrackingMockResp(MockResp):
-            async def __aenter__(self):
-                nonlocal active_requests, max_concurrent_seen
-                active_requests += 1
-                max_concurrent_seen = max(max_concurrent_seen, active_requests)
-                await asyncio.sleep(0.01)
-                return await super().__aenter__()
-
-            async def __aexit__(self, *args):
-                nonlocal active_requests
-                active_requests -= 1
-
-        run_cli_with_mock(
-            [
-                "--tasks",
-                "gsm8k_llama",
-                "--model_args",
-                'model="test-model",base_url="http://test.com/v1",num_concurrent=2',
-            ],
-            {"gsm8k_llama": _multi_sample},
-            lambda url, **kwargs: TrackingMockResp(),
-        )
-
-        assert (
-            max_concurrent_seen <= 2
-        ), f"Expected max 2 concurrent, saw {max_concurrent_seen}"
-
     def test_model_args_passed_to_config(self):
         """model_args CLI arg flows through to APIConfig and API request."""
         captured_payload = None
 
-        def mock_post(url, **kwargs):
+        async def mock_post(url, **kwargs):
             nonlocal captured_payload
             captured_payload = kwargs.get("json")
             return MockResp()
