@@ -24,7 +24,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-
+import logging
 from typing import TypedDict
 
 from core import APIConfig, TaskResult, run_task
@@ -64,6 +64,8 @@ async def evaluate(
 
 def main() -> int:
     """CLI entry point."""
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
     parser = argparse.ArgumentParser(description="tinyeval - Minimal LLM evaluation")
     parser.add_argument(
         "--tasks", required=True, help=f"Comma-separated: {', '.join(TASKS.keys())}"
