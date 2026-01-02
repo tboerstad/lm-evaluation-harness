@@ -11,17 +11,13 @@ from unittest.mock import patch
 import pytest
 
 from core import APIConfig, Sample, Task
+from tasks.gsm8k import score as gsm8k_score
 from tinyeval import evaluate, main
 
 
 def _single_sample(max_samples: int | None = None) -> list[Sample]:
     """Single sample for basic tests."""
     return [Sample(prompt="What is 2+2?", target="4")]
-
-
-def _simple_score(response: str, target: str) -> float:
-    """Simple scoring: 1.0 if target in response, else 0.0."""
-    return 1.0 if target in response else 0.0
 
 
 class MockResp:
@@ -58,7 +54,7 @@ class TestE2E:
 
         mock_tasks = {
             "gsm8k_llama": Task(
-                name="gsm8k_llama", samples=_single_sample, score=_simple_score
+                name="gsm8k_llama", samples=_single_sample, score=gsm8k_score
             )
         }
 
@@ -90,7 +86,7 @@ class TestE2E:
 
         mock_tasks = {
             "gsm8k_llama": Task(
-                name="gsm8k_llama", samples=_single_sample, score=_simple_score
+                name="gsm8k_llama", samples=_single_sample, score=gsm8k_score
             )
         }
 
@@ -130,7 +126,7 @@ class TestE2E:
 
         mock_tasks = {
             "gsm8k_llama": Task(
-                name="gsm8k_llama", samples=_single_sample, score=_simple_score
+                name="gsm8k_llama", samples=_single_sample, score=gsm8k_score
             )
         }
 

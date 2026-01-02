@@ -31,9 +31,15 @@ from core import APIConfig, TaskResult, run_task
 from tasks import TASKS
 
 
+class ConfigInfo(TypedDict):
+    model: str
+    max_samples: int | None
+
+
 class EvalResult(TypedDict):
     results: dict[str, TaskResult]
     total_seconds: float
+    config: ConfigInfo
 
 
 def _parse_kwargs(s: str) -> dict[str, str | int | float]:
@@ -66,7 +72,11 @@ async def evaluate(
         results[name] = result
         total_seconds += result["elapsed"]
 
-    return {"results": results, "total_seconds": round(total_seconds, 2)}
+    return {
+        "results": results,
+        "total_seconds": round(total_seconds, 2),
+        "config": {"model": config.model, "max_samples": max_samples},
+    }
 
 
 def main() -> int:
@@ -111,7 +121,6 @@ def main() -> int:
 
     task_names = [t.strip() for t in args.tasks.split(",") if t.strip()]
     output = asyncio.run(evaluate(task_names, config, args.max_samples))
-    output["config"] = {"model": config.model, "max_samples": args.max_samples}
 
     print(json.dumps(output, indent=2))
     if args.output:

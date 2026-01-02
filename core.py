@@ -73,18 +73,6 @@ class Task:
     score: Callable[[str, str], float]  # (response, target) -> score
 
 
-# Pre-compiled regex patterns for _normalize
-_NORMALIZE_CURRENCY_RE = re.compile(
-    r"[$,]"
-)  # Strip currency symbols: "$1,234" -> "1234"
-_NORMALIZE_THOUGHT_RE = re.compile(
-    r"(?s).*#### "
-)  # Strip GSM8K chain-of-thought prefix
-# GSM8K answers are formatted as "reasoning steps #### final_answer"
-# (?s) enables DOTALL so .* matches across newlines
-_NORMALIZE_END_RE = re.compile(r"\.$")  # Strip trailing period: "42." -> "42"
-
-
 MAX_BACKOFF = 8  # Cap exponential backoff at 8 seconds
 
 
@@ -207,9 +195,9 @@ def _encode_image(image: Any) -> str:
 
 def _normalize(text: str) -> str:
     """Normalize text for comparison."""
-    text = _NORMALIZE_CURRENCY_RE.sub("", text)
-    text = _NORMALIZE_THOUGHT_RE.sub("", text)
-    text = _NORMALIZE_END_RE.sub("", text)
+    text = re.sub(r"[$,]", "", text)
+    text = re.sub(r"(?s).*#### ", "", text)
+    text = re.sub(r"\.$", "", text)
     return text.lower().strip()
 
 
