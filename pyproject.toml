@@ -16,11 +16,11 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
     # Dataset loading (HuggingFace datasets for benchmarks)
-    "datasets>=2.16.0,<4.0",
+    "datasets==3.6.0",
     # HTTP client
-    "httpx",
+    "httpx==0.28.1",
     # Image handling (for multimodal tasks)
-    "pillow",
+    "pillow==12.1.0",
 ]
 
 [project.scripts]
