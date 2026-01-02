@@ -57,14 +57,6 @@ _GSM8K_TEMPLATE = (
     'Your response should end with "The final answer is [answer]" where [answer] is the response to the problem.'
 )
 
-_GSM8K_STOP = [
-    "<|eot_id|>",
-    "<|start_header_id|>user<|end_header_id|>",
-    "Q:",
-    "</s>",
-    "<|im_end|>",
-]
-
 _NUM_PATTERN = r"-?[$0-9.,]{2,}|-?[0-9]+"
 
 
@@ -119,5 +111,4 @@ gsm8k_llama = Task(
     name="gsm8k_llama",
     samples=samples,
     score=score,
-    stop=_GSM8K_STOP,
 )

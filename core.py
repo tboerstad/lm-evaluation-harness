@@ -18,7 +18,7 @@ import logging
 import re
 import time
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from io import BytesIO
 from typing import Any, TypedDict
 
@@ -61,19 +61,17 @@ class Task:
             score=lambda response, target: 1.0 if response == target else 0.0,
         )
 
-        # Multimodal task with stop sequences
+        # Multimodal task
         Task(
             name="chartqa",
             samples=lambda n: (Sample((text, [img]), target) for ...),
             score=relaxed_match,
-            stop=["END"],
         )
     """
 
     name: str
     samples: Callable[[int | None], Iterator[Sample]]  # max_samples -> samples
     score: Callable[[str, str], float]  # (response, target) -> score
-    stop: list[str] = field(default_factory=list)
 
 
 # Pre-compiled regex patterns for _normalize
@@ -238,8 +236,7 @@ async def run_task(
 
     logger.info("Evaluating: %s (%d samples)", task.name, len(samples))
     t0 = time.perf_counter()
-    gen_kwargs = {"stop": task.stop} if task.stop else None
-    responses = await complete(prompts, config, gen_kwargs=gen_kwargs)
+    responses = await complete(prompts, config)
     elapsed = time.perf_counter() - t0
 
     # Score each response
