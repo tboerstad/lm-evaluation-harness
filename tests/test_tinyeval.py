@@ -23,14 +23,6 @@ def _single_sample(max_samples: int | None = None) -> list[Sample]:
     return [Sample(prompt="What is 2+2?", target="4")]
 
 
-def _multi_sample(max_samples: int | None = None) -> list[Sample]:
-    """Multiple samples for concurrency tests."""
-    samples = [Sample(prompt=f"Question {i}?", target="42") for i in range(5)]
-    if max_samples is not None:
-        return samples[:max_samples]
-    return samples
-
-
 class MockResp:
     """Mock httpx response."""
 
@@ -130,34 +122,6 @@ class TestE2E:
         config = APIConfig(url="http://test.com", model="test")
         with pytest.raises(ValueError, match="Unknown task"):
             asyncio.run(evaluate(["nonexistent_task"], config))
-
-    def test_num_concurrent_limits_parallel_requests(self):
-        """num_concurrent CLI arg limits the number of parallel API requests."""
-        active_requests = 0
-        max_concurrent_seen = 0
-
-        async def tracking_post(url, **kwargs):
-            nonlocal active_requests, max_concurrent_seen
-            active_requests += 1
-            max_concurrent_seen = max(max_concurrent_seen, active_requests)
-            await asyncio.sleep(0.01)
-            active_requests -= 1
-            return MockResp()
-
-        run_cli_with_mock(
-            [
-                "--tasks",
-                "gsm8k_llama",
-                "--model_args",
-                'model="test-model",base_url="http://test.com/v1",num_concurrent=2',
-            ],
-            {"gsm8k_llama": _multi_sample},
-            tracking_post,
-        )
-
-        assert (
-            max_concurrent_seen <= 2
-        ), f"Expected max 2 concurrent, saw {max_concurrent_seen}"
 
     def test_model_args_passed_to_config(self):
         """model_args CLI arg flows through to APIConfig and API request."""

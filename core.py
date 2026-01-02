@@ -103,19 +103,15 @@ async def _request(
     client: httpx.AsyncClient,
     url: str,
     payload: dict[str, Any],
-    semaphore: asyncio.Semaphore,
     max_retries: int,
 ) -> str:
     """Single request with retries. Raises RuntimeError if all retries fail."""
     for attempt in range(max_retries):
         try:
-            async with semaphore:
-                resp = await client.post(url, json=payload)
-                if resp.is_success:
-                    return resp.json()["choices"][0]["message"]["content"]
-                logger.warning(
-                    "Request failed (attempt %d): %s", attempt + 1, resp.text
-                )
+            resp = await client.post(url, json=payload)
+            if resp.is_success:
+                return resp.json()["choices"][0]["message"]["content"]
+            logger.warning("Request failed (attempt %d): %s", attempt + 1, resp.text)
         except asyncio.CancelledError:
             raise  # Allow the program to exit immediately on Ctrl+C
         except httpx.HTTPError as e:
@@ -147,8 +143,6 @@ async def complete(
     if config.api_key:
         headers["Authorization"] = f"Bearer {config.api_key}"
 
-    semaphore = asyncio.Semaphore(config.num_concurrent)
-
     async with httpx.AsyncClient(
         limits=httpx.Limits(max_connections=config.num_concurrent),
         timeout=httpx.Timeout(config.timeout),
@@ -170,9 +164,7 @@ async def complete(
                 **config.gen_kwargs,
             }
 
-            tasks.append(
-                _request(client, config.url, payload, semaphore, config.max_retries)
-            )
+            tasks.append(_request(client, config.url, payload, config.max_retries))
 
         return list(await asyncio.gather(*tasks))
 
