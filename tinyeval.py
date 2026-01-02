@@ -29,7 +29,7 @@ from core import APIConfig, TaskResult, run_task
 from tasks import TASKS
 
 
-def _parse_gen_kwargs(s: str) -> dict:
+def _parse_kwargs(s: str) -> dict:
     """Parse 'key=value,key=value' into dict."""
     return (
         {k: json.loads(v) for k, v in (p.split("=", 1) for p in s.split(","))}
@@ -61,34 +61,41 @@ def main() -> int:
     parser.add_argument(
         "--tasks", required=True, help=f"Comma-separated: {', '.join(TASKS.keys())}"
     )
-    parser.add_argument("--model", required=True, help="Model name")
-    parser.add_argument("--base_url", required=True, help="API base URL")
-    parser.add_argument("--api_key", default="", help="API key")
-    parser.add_argument("--max_samples", type=int, help="Max samples per task")
     parser.add_argument(
-        "--num_concurrent", type=int, default=8, help="Concurrent requests"
+        "--model_args",
+        required=True,
+        help="model=...,base_url=...,num_concurrent=4,max_retries=3",
     )
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument(
         "--gen_kwargs",
         default="",
         help="Generation kwargs (e.g. temperature=0.7,max_tokens=1024)",
     )
+    parser.add_argument("--max_samples", type=int, help="Max samples per task")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--output", help="Output JSON file")
     args = parser.parse_args()
 
+    model_args = _parse_kwargs(args.model_args)
+
+    if "model" not in model_args:
+        parser.error("model_args must include model=...")
+    if "base_url" not in model_args:
+        parser.error("model_args must include base_url=...")
+
     config = APIConfig(
-        url=args.base_url,
-        model=args.model,
-        api_key=args.api_key,
-        num_concurrent=args.num_concurrent,
-        seed=args.seed,
-        gen_kwargs=_parse_gen_kwargs(args.gen_kwargs),
+        url=model_args["base_url"],
+        model=model_args["model"],
+        api_key=model_args.get("api_key", ""),
+        num_concurrent=model_args.get("num_concurrent", 8),
+        max_retries=model_args.get("max_retries", 3),
+        seed=model_args.get("seed", args.seed),
+        gen_kwargs=_parse_kwargs(args.gen_kwargs),
     )
 
     task_names = [t.strip() for t in args.tasks.split(",") if t.strip()]
     output = asyncio.run(evaluate(task_names, config, args.max_samples))
-    output["config"] = {"model": args.model, "max_samples": args.max_samples}
+    output["config"] = {"model": config.model, "max_samples": args.max_samples}
 
     print(json.dumps(output, indent=2))
     if args.output:
