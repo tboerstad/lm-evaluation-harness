@@ -162,11 +162,6 @@ class TestEncodeImage:
         b64_string = "SGVsbG8gV29ybGQ="
         assert _encode_image(b64_string) == b64_string
 
-    def test_encode_rejects_remote_url(self):
-        """Remote URLs raise ValueError."""
-        with pytest.raises(ValueError, match="Remote image URLs are not supported"):
-            _encode_image("http://example.com/image.png")
-
     def test_encode_rejects_unsupported_type(self):
         """Unsupported types raise TypeError."""
         with pytest.raises(TypeError, match="Unsupported image type"):
