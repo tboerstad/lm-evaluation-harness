@@ -9,8 +9,9 @@ import sys
 from unittest.mock import patch
 
 import pytest
+from PIL import Image
 
-from core import APIConfig, Sample, Task
+from core import APIConfig, Sample, Task, _encode_image
 from tasks.gsm8k import score as gsm8k_score
 from tinyeval import evaluate, main
 
@@ -144,3 +145,37 @@ class TestE2E:
         )
 
         assert captured_payload["model"] == "test-model"
+
+
+class TestEncodeImage:
+    """Tests for _encode_image function."""
+
+    def test_encode_valid_image(self):
+        """Valid PIL image encodes to base64."""
+        img = Image.new("RGB", (10, 10), color="red")
+        result = _encode_image(img)
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_encode_passthrough_string(self):
+        """Base64 string passes through unchanged."""
+        b64_string = "SGVsbG8gV29ybGQ="
+        assert _encode_image(b64_string) == b64_string
+
+    def test_encode_rejects_remote_url(self):
+        """Remote URLs raise ValueError."""
+        with pytest.raises(ValueError, match="Remote image URLs are not supported"):
+            _encode_image("http://example.com/image.png")
+
+    def test_encode_rejects_unsupported_type(self):
+        """Unsupported types raise TypeError."""
+        with pytest.raises(TypeError, match="Unsupported image type"):
+            _encode_image(12345)
+
+    def test_encode_raises_on_corrupt_image(self):
+        """Corrupt image raises ValueError."""
+        img = Image.new("RGB", (10, 10))
+        # Corrupt the image by clearing its internal data
+        img.im = None
+        with pytest.raises(ValueError, match="Failed to encode image"):
+            _encode_image(img)

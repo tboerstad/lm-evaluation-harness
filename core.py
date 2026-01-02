@@ -183,12 +183,15 @@ def _encode_image(image: Any) -> str:
         return image
 
     if isinstance(image, Image.Image):
-        # Convert to RGB if needed to avoid save errors with CMYK/palette modes
-        if image.mode not in ("RGB", "L"):
-            image = image.convert("RGB")
-        buf = BytesIO()
-        image.save(buf, format="PNG")
-        return base64.b64encode(buf.getvalue()).decode()
+        try:
+            # Convert to RGB if needed to avoid save errors with CMYK/palette modes
+            if image.mode not in ("RGB", "L"):
+                image = image.convert("RGB")
+            buf = BytesIO()
+            image.save(buf, format="PNG")
+            return base64.b64encode(buf.getvalue()).decode()
+        except Exception as e:
+            raise ValueError(f"Failed to encode image: {e}") from e
 
     raise TypeError(f"Unsupported image type: {type(image).__name__}")
 
