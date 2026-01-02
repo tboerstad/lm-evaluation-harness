@@ -10,7 +10,6 @@ Defines:
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
 
 import datasets
 
@@ -92,15 +91,32 @@ def _extract_gsm8k_answer(response: str) -> str:
     return response
 
 
-def samples() -> Iterator[Sample]:
-    """Generate GSM8K samples: (formatted_prompt, target_answer)."""
+def samples(max_samples: int | None = None) -> list[Sample]:
+    """Load GSM8K samples: (formatted_prompt, target_answer).
+
+    Args:
+        max_samples: Optional limit on number of samples to download
+
+    Returns:
+        List of Sample objects
+    """
+    result: list[Sample] = []
+    remaining = max_samples
     for split in ["test", "train"]:
+        if remaining is not None and remaining <= 0:
+            break
         ds = datasets.load_dataset("gsm8k", "main", split=split, streaming=True)
-        for doc in ds:
-            yield Sample(
-                prompt=_format_gsm8k_prompt(doc["question"]),
-                target=_parse_target(doc["answer"]),
+        docs = ds.take(remaining) if remaining is not None else ds
+        for doc in docs:
+            result.append(
+                Sample(
+                    prompt=_format_gsm8k_prompt(doc["question"]),
+                    target=_parse_target(doc["answer"]),
+                )
             )
+        if remaining is not None:
+            remaining = max_samples - len(result)
+    return result
 
 
 def score(response: str, target: str) -> float:

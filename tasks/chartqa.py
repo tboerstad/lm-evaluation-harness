@@ -10,7 +10,6 @@ Defines:
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
 
 import datasets
 
@@ -57,17 +56,34 @@ def _relaxed_match(response: str, target: str) -> float:
     return 0.0
 
 
-def samples() -> Iterator[Sample]:
-    """Generate ChartQA samples: ((prompt, [image]), target)."""
+def samples(max_samples: int | None = None) -> list[Sample]:
+    """Load ChartQA samples: ((prompt, [image]), target).
+
+    Args:
+        max_samples: Optional limit on number of samples to download
+
+    Returns:
+        List of Sample objects
+    """
+    result: list[Sample] = []
+    remaining = max_samples
     for split in ["test", "val", "train"]:
+        if remaining is not None and remaining <= 0:
+            break
         ds = datasets.load_dataset("HuggingFaceM4/ChartQA", split=split, streaming=True)
-        for doc in ds:
+        docs = ds.take(remaining) if remaining is not None else ds
+        for doc in docs:
             label = doc["label"]
             target = label[0] if isinstance(label, list) else str(label)
-            yield Sample(
-                prompt=(_format_chartqa_prompt(doc["query"]), [doc["image"]]),
-                target=target,
+            result.append(
+                Sample(
+                    prompt=(_format_chartqa_prompt(doc["query"]), [doc["image"]]),
+                    target=target,
+                )
             )
+        if remaining is not None:
+            remaining = max_samples - len(result)
+    return result
 
 
 def score(response: str, target: str) -> float:
