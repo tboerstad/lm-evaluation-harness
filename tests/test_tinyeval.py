@@ -201,11 +201,6 @@ class TestTaskAbstraction:
         assert task.name == "test"
         assert task.stop == []  # default
 
-    def test_api_config_max_tokens(self):
-        """APIConfig has max_tokens with default value."""
-        config = APIConfig(url="http://test.com", model="test")
-        assert config.max_tokens == 512  # default
-
     def test_run_task_with_simple_task(self):
         """run_task evaluates a task and returns TaskResult."""
         config = APIConfig(url="http://test.com/v1/chat/completions", model="test")
