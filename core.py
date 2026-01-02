@@ -18,7 +18,7 @@ import logging
 import re
 import time
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from io import BytesIO
 from typing import Any, TypedDict
 
@@ -91,6 +91,7 @@ class APIConfig:
     timeout: int = 300
     max_retries: int = 3
     seed: int = 1234
+    gen_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 async def _request(
@@ -128,7 +129,6 @@ async def _request(
 async def complete(
     prompts: list[str | tuple[str, list]],
     config: APIConfig,
-    gen_kwargs: dict[str, Any] | None = None,
 ) -> list[str]:
     """
     Run batch of chat completions.
@@ -137,8 +137,7 @@ async def complete(
         prompts: List of prompts. Each is either:
             - str: text-only prompt
             - tuple[str, list]: (text, images) for multimodal
-        config: API configuration
-        gen_kwargs: Generation kwargs forwarded to API (e.g. max_tokens, temperature, stop)
+        config: API configuration (includes gen_kwargs for temperature, max_tokens, etc.)
 
     Returns:
         List of response strings
@@ -167,9 +166,8 @@ async def complete(
                 "model": config.model,
                 "messages": messages,
                 "seed": config.seed,
+                **config.gen_kwargs,
             }
-            if gen_kwargs:
-                payload.update(gen_kwargs)
 
             tasks.append(
                 _request(session, config.url, payload, semaphore, config.max_retries)
@@ -218,19 +216,15 @@ def _normalize(text: str) -> str:
 
 
 async def run_task(
-    task: Task,
-    config: APIConfig,
-    max_samples: int | None = None,
-    gen_kwargs: dict[str, Any] | None = None,
+    task: Task, config: APIConfig, max_samples: int | None = None
 ) -> TaskResult:
     """
     Evaluate a task: collect samples, run inference, compute scores.
 
     Args:
         task: Task definition with samples generator and scoring function
-        config: API configuration
+        config: API configuration (includes gen_kwargs for temperature, max_tokens, etc.)
         max_samples: Optional limit on number of samples
-        gen_kwargs: Generation kwargs forwarded to API (e.g. max_tokens, temperature)
 
     Returns:
         TaskResult with metrics, sample count, and elapsed time
@@ -240,7 +234,7 @@ async def run_task(
 
     logger.info("Evaluating: %s (%d samples)", task.name, len(samples))
     t0 = time.perf_counter()
-    responses = await complete(prompts, config, gen_kwargs)
+    responses = await complete(prompts, config)
     elapsed = time.perf_counter() - t0
 
     # Score each response
