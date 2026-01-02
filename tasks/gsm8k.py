@@ -10,7 +10,6 @@ Defines:
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
 
 import datasets
 
@@ -92,15 +91,37 @@ def _extract_gsm8k_answer(response: str) -> str:
     return response
 
 
-def samples() -> Iterator[Sample]:
-    """Generate GSM8K samples: (formatted_prompt, target_answer)."""
-    for split in ["test", "train"]:
-        ds = datasets.load_dataset("gsm8k", "main", split=split, streaming=True)
-        for doc in ds:
-            yield Sample(
-                prompt=_format_gsm8k_prompt(doc["question"]),
-                target=_parse_target(doc["answer"]),
-            )
+def samples(max_samples: int | None = None, seed: int | None = None) -> list[Sample]:
+    """Load GSM8K samples: (formatted_prompt, target_answer).
+
+    Args:
+        max_samples: Optional limit on number of samples to load
+        seed: Optional seed for shuffling before selecting samples
+
+    Returns:
+        List of Sample objects
+    """
+    # Load and concatenate all splits
+    splits = [
+        datasets.load_dataset("gsm8k", "main", split=s) for s in ["test", "train"]
+    ]
+    ds = datasets.concatenate_datasets(splits)
+
+    # Shuffle if seed provided
+    if seed is not None:
+        ds = ds.shuffle(seed=seed)
+
+    # Limit samples if specified
+    if max_samples is not None:
+        ds = ds.select(range(min(max_samples, len(ds))))
+
+    return [
+        Sample(
+            prompt=_format_gsm8k_prompt(doc["question"]),
+            target=_parse_target(doc["answer"]),
+        )
+        for doc in ds
+    ]
 
 
 def score(response: str, target: str) -> float:

@@ -6,7 +6,7 @@ Tests the full workflow: CLI args → API call → JSON output.
 
 import asyncio
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from contextlib import contextmanager
 from unittest.mock import patch
 
@@ -17,16 +17,22 @@ from tasks import TASKS
 from tinyeval import evaluate, main
 
 
-# Reusable mock sample generators
-def _single_sample() -> Iterator[Sample]:
+# Reusable mock sample loaders
+def _single_sample(
+    max_samples: int | None = None, seed: int | None = None
+) -> list[Sample]:
     """Single sample for basic tests."""
-    yield Sample(prompt="What is 2+2?", target="4")
+    return [Sample(prompt="What is 2+2?", target="4")]
 
 
-def _multi_sample() -> Iterator[Sample]:
+def _multi_sample(
+    max_samples: int | None = None, seed: int | None = None
+) -> list[Sample]:
     """Multiple samples for concurrency tests."""
-    for i in range(5):
-        yield Sample(prompt=f"Question {i}?", target="42")
+    samples = [Sample(prompt=f"Question {i}?", target="42") for i in range(5)]
+    if max_samples is not None:
+        return samples[:max_samples]
+    return samples
 
 
 class MockResp:
@@ -47,7 +53,7 @@ class MockResp:
         pass
 
 
-SamplesFn = Callable[[], Iterator[Sample]]
+SamplesFn = Callable[[int | None, int | None], list[Sample]]
 
 
 @contextmanager

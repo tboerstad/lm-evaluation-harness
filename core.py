@@ -17,10 +17,9 @@ import base64
 import logging
 import re
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from io import BytesIO
-from itertools import islice
 from typing import Any, TypedDict
 
 import aiohttp
@@ -51,26 +50,28 @@ class Sample:
 @dataclass
 class Task:
     """
-    Minimal task definition: a generator of samples + a scoring function.
+    Minimal task definition: a loader of samples + a scoring function.
 
     Examples:
         # Text-only task
         Task(
             name="gsm8k",
-            samples=lambda: (Sample(prompt, target) for prompt, target in data),
+            samples=lambda max_samples, seed: load_samples(max_samples, seed),
             score=lambda response, target: 1.0 if response == target else 0.0,
         )
 
         # Multimodal task
         Task(
             name="chartqa",
-            samples=lambda: (Sample((text, [img]), target) for ...),
+            samples=lambda max_samples, seed: load_chartqa(max_samples, seed),
             score=relaxed_match,
         )
     """
 
     name: str
-    samples: Callable[[], Iterator[Sample]]  # generator of samples
+    samples: Callable[
+        [int | None, int | None], list[Sample]
+    ]  # (max_samples, seed) -> samples
     score: Callable[[str, str], float]  # (response, target) -> score
 
 
@@ -226,14 +227,14 @@ async def run_task(
     Evaluate a task: collect samples, run inference, compute scores.
 
     Args:
-        task: Task definition with samples generator and scoring function
+        task: Task definition with samples loader and scoring function
         config: API configuration (includes gen_kwargs for temperature, max_tokens, etc.)
         max_samples: Optional limit on number of samples
 
     Returns:
         TaskResult with metrics, sample count, and elapsed time
     """
-    samples = list(islice(task.samples(), max_samples))
+    samples = task.samples(max_samples, config.seed)
     prompts = [s.prompt for s in samples]
 
     logger.info("Evaluating: %s (%d samples)", task.name, len(samples))
