@@ -32,21 +32,15 @@ def _multi_sample(max_samples: int | None = None) -> list[Sample]:
 
 
 class MockResp:
-    """Mock aiohttp response."""
+    """Mock httpx response."""
 
-    ok = True
+    is_success = True
 
     def __init__(self, content: str = "42"):
         self._content = content
 
-    async def json(self):
+    def json(self):
         return {"choices": [{"message": {"content": self._content}}]}
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *args):
-        pass
 
 
 SamplesFn = Callable[[int | None], list[Sample]]
@@ -72,8 +66,8 @@ def cli_context(args: list[str], mock_samples: dict[str, SamplesFn]):
 def run_cli_with_mock(args: list[str], mock_samples: dict[str, SamplesFn], post_fn):
     """Run CLI with mocked API post function."""
     with cli_context(args, mock_samples):
-        with patch("core.aiohttp.ClientSession") as mock_session:
-            mock_session.return_value.__aenter__.return_value.post = post_fn
+        with patch("core.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value.post = post_fn
             main()
 
 
@@ -82,6 +76,10 @@ class TestE2E:
 
     def test_gsm8k_evaluation(self, capsys):
         """GSM8K task produces correct JSON output."""
+
+        async def mock_post(url, **kwargs):
+            return MockResp("The final answer is 4")
+
         run_cli_with_mock(
             [
                 "--tasks",
@@ -92,7 +90,7 @@ class TestE2E:
                 "1",
             ],
             {"gsm8k_llama": _single_sample},
-            lambda url, **kwargs: MockResp("The final answer is 4"),
+            mock_post,
         )
 
         output = capsys.readouterr().out
@@ -103,7 +101,7 @@ class TestE2E:
         """gen_kwargs CLI arg flows through to API request payload."""
         captured_payload = None
 
-        def mock_post(url, **kwargs):
+        async def mock_post(url, **kwargs):
             nonlocal captured_payload
             captured_payload = kwargs.get("json")
             return MockResp()
@@ -138,17 +136,13 @@ class TestE2E:
         active_requests = 0
         max_concurrent_seen = 0
 
-        class TrackingMockResp(MockResp):
-            async def __aenter__(self):
-                nonlocal active_requests, max_concurrent_seen
-                active_requests += 1
-                max_concurrent_seen = max(max_concurrent_seen, active_requests)
-                await asyncio.sleep(0.01)
-                return await super().__aenter__()
-
-            async def __aexit__(self, *args):
-                nonlocal active_requests
-                active_requests -= 1
+        async def tracking_post(url, **kwargs):
+            nonlocal active_requests, max_concurrent_seen
+            active_requests += 1
+            max_concurrent_seen = max(max_concurrent_seen, active_requests)
+            await asyncio.sleep(0.01)
+            active_requests -= 1
+            return MockResp()
 
         run_cli_with_mock(
             [
@@ -158,7 +152,7 @@ class TestE2E:
                 'model="test-model",base_url="http://test.com/v1",num_concurrent=2',
             ],
             {"gsm8k_llama": _multi_sample},
-            lambda url, **kwargs: TrackingMockResp(),
+            tracking_post,
         )
 
         assert (
@@ -169,7 +163,7 @@ class TestE2E:
         """model_args CLI arg flows through to APIConfig and API request."""
         captured_payload = None
 
-        def mock_post(url, **kwargs):
+        async def mock_post(url, **kwargs):
             nonlocal captured_payload
             captured_payload = kwargs.get("json")
             return MockResp()
