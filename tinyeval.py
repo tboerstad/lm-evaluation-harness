@@ -29,7 +29,7 @@ from core import APIConfig, TaskResult, run_task
 from tasks import TASKS
 
 
-def _parse_gen_kwargs(s: str) -> dict:
+def _parse_kwargs(s: str) -> dict:
     """Parse 'key=value,key=value' into dict."""
     return (
         {k: json.loads(v) for k, v in (p.split("=", 1) for p in s.split(","))}
@@ -75,20 +75,29 @@ def main() -> int:
         help="Generation kwargs (e.g. temperature=0.7,max_tokens=1024)",
     )
     parser.add_argument("--output", help="Output JSON file")
+    parser.add_argument(
+        "--model_args",
+        default="",
+        help="Model args (e.g. model=gpt-4,base_url=http://...,num_concurrent=4)",
+    )
     args = parser.parse_args()
 
+    # Parse model_args and use as defaults (CLI args override)
+    model_args = _parse_kwargs(args.model_args)
+
     config = APIConfig(
-        url=args.base_url,
-        model=args.model,
-        api_key=args.api_key,
-        num_concurrent=args.num_concurrent,
-        seed=args.seed,
-        gen_kwargs=_parse_gen_kwargs(args.gen_kwargs),
+        url=model_args.get("base_url", args.base_url),
+        model=model_args.get("model", args.model),
+        api_key=model_args.get("api_key", args.api_key),
+        num_concurrent=model_args.get("num_concurrent", args.num_concurrent),
+        max_retries=model_args.get("max_retries", 3),
+        seed=model_args.get("seed", args.seed),
+        gen_kwargs=_parse_kwargs(args.gen_kwargs),
     )
 
     task_names = [t.strip() for t in args.tasks.split(",") if t.strip()]
     output = asyncio.run(evaluate(task_names, config, args.max_samples))
-    output["config"] = {"model": args.model, "max_samples": args.max_samples}
+    output["config"] = {"model": config.model, "max_samples": args.max_samples}
 
     print(json.dumps(output, indent=2))
     if args.output:

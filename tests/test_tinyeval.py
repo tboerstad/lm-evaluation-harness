@@ -202,3 +202,56 @@ class TestE2E:
         assert (
             max_concurrent_seen <= 2
         ), f"Expected max 2 concurrent, saw {max_concurrent_seen}"
+
+    def test_model_args_passed_to_config(self):
+        """model_args CLI arg flows through to APIConfig and API request."""
+        captured_payload = None
+
+        class MockResp:
+            ok = True
+
+            async def json(self):
+                return {"choices": [{"message": {"content": "42"}}]}
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+        def mock_post(url, **kwargs):
+            nonlocal captured_payload
+            captured_payload = kwargs.get("json")
+            return MockResp()
+
+        def mock_samples(n):
+            yield Sample(prompt="What is 2+2?", target="4")
+
+        original_argv = sys.argv
+        original_samples = TASKS["gsm8k_llama"].samples
+
+        try:
+            sys.argv = [
+                "tinyeval",
+                "--tasks",
+                "gsm8k_llama",
+                "--model",
+                "default-model",
+                "--base_url",
+                "http://default.com/v1",
+                "--max_samples",
+                "1",
+                "--model_args",
+                'model="override-model",base_url="http://override.com/v1",num_concurrent=4,max_retries=5',
+            ]
+            TASKS["gsm8k_llama"].samples = mock_samples
+
+            with patch("core.aiohttp.ClientSession") as mock_session:
+                mock_session.return_value.__aenter__.return_value.post = mock_post
+                main()
+        finally:
+            sys.argv = original_argv
+            TASKS["gsm8k_llama"].samples = original_samples
+
+        # model_args should override CLI args
+        assert captured_payload["model"] == "override-model"
