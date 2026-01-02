@@ -31,16 +31,7 @@ from tasks import TASKS
 
 def _parse_gen_kwargs(s: str) -> dict:
     """Parse 'key=value,key=value' into dict."""
-    if not s:
-        return {}
-    result = {}
-    for pair in s.split(","):
-        key, _, value = pair.partition("=")
-        try:
-            result[key.strip()] = json.loads(value.strip())
-        except json.JSONDecodeError:
-            result[key.strip()] = value.strip()
-    return result
+    return dict(p.split("=", 1) for p in s.split(",")) if s else {}
 
 
 async def evaluate(
