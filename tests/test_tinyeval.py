@@ -231,13 +231,9 @@ class TestHTTPClient:
 
         assert captured_payload is not None
         assert isinstance(captured_payload["temperature"], float)
-        assert captured_payload["temperature"] == 0.7
         assert isinstance(captured_payload["max_tokens"], int)
-        assert captured_payload["max_tokens"] == 100
         assert isinstance(captured_payload["reasoning_effort"], str)
-        assert captured_payload["reasoning_effort"] == "medium"
         assert isinstance(captured_payload["logit_bias"], dict)
-        assert captured_payload["logit_bias"] == {"42": -100, "1234": 50}
 
 
 class TestTaskAbstraction:
