@@ -145,3 +145,60 @@ class TestE2E:
         config = APIConfig(url="http://test.com", model="test")
         with pytest.raises(ValueError, match="Unknown task"):
             asyncio.run(evaluate(["nonexistent_task"], config))
+
+    def test_num_concurrent_limits_parallel_requests(self):
+        """num_concurrent CLI arg limits the number of parallel API requests."""
+        active_requests = 0
+        max_concurrent_seen = 0
+
+        class MockResp:
+            ok = True
+
+            async def json(self):
+                return {"choices": [{"message": {"content": "42"}}]}
+
+            async def __aenter__(self):
+                nonlocal active_requests, max_concurrent_seen
+                active_requests += 1
+                max_concurrent_seen = max(max_concurrent_seen, active_requests)
+                await asyncio.sleep(0.01)  # Simulate network delay
+                return self
+
+            async def __aexit__(self, *args):
+                nonlocal active_requests
+                active_requests -= 1
+
+        def mock_post(url, **kwargs):
+            return MockResp()
+
+        def mock_samples(n):
+            for i in range(5):
+                yield Sample(prompt=f"Question {i}?", target="42")
+
+        original_argv = sys.argv
+        original_samples = TASKS["gsm8k_llama"].samples
+
+        try:
+            sys.argv = [
+                "tinyeval",
+                "--tasks",
+                "gsm8k_llama",
+                "--model",
+                "test-model",
+                "--base_url",
+                "http://test.com/v1",
+                "--num_concurrent",
+                "2",
+            ]
+            TASKS["gsm8k_llama"].samples = mock_samples
+
+            with patch("core.aiohttp.ClientSession") as mock_session:
+                mock_session.return_value.__aenter__.return_value.post = mock_post
+                main()
+        finally:
+            sys.argv = original_argv
+            TASKS["gsm8k_llama"].samples = original_samples
+
+        assert (
+            max_concurrent_seen <= 2
+        ), f"Expected max 2 concurrent, saw {max_concurrent_seen}"
