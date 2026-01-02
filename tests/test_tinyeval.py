@@ -184,18 +184,11 @@ class TestHTTPClient:
 
         assert responses[0] == "I see a chart"
 
-    def test_gen_kwargs_types_in_request(self):
-        """gen_kwargs are properly typed in request payload."""
-        config = APIConfig(
-            url="http://test.com/v1/chat/completions",
-            model="test-model",
-            gen_kwargs={
-                "temperature": 0.7,
-                "max_tokens": 100,
-                "reasoning_effort": "medium",
-                "logit_bias": {"42": -100, "1234": 50},
-            },
-        )
+    def test_gen_kwargs_from_cli(self):
+        """End-to-end test: gen_kwargs CLI string flows through to API request."""
+        import sys
+
+        from tinyeval import main
 
         captured_payload = None
 
@@ -203,7 +196,7 @@ class TestHTTPClient:
             ok = True
 
             async def json(self):
-                return {"choices": [{"message": {"content": "test response"}}]}
+                return {"choices": [{"message": {"content": "42"}}]}
 
             async def __aenter__(self):
                 return self
@@ -225,15 +218,48 @@ class TestHTTPClient:
         def mock_post(url, json=None):
             return MockContextManager(json)
 
-        with patch("core.aiohttp.ClientSession") as mock_session:
-            mock_session.return_value.__aenter__.return_value.post = mock_post
-            asyncio.run(complete(["test prompt"], config))
+        # Mock sys.argv to simulate CLI invocation
+        original_argv = sys.argv
+        try:
+            sys.argv = [
+                "tinyeval",
+                "--tasks",
+                "gsm8k_llama",
+                "--model",
+                "test-model",
+                "--base_url",
+                "http://test.com/v1/chat/completions",
+                "--max_samples",
+                "1",
+                "--gen_kwargs",
+                'temperature=0.7,max_tokens=100,reasoning_effort="medium"',
+            ]
 
+            # Mock dataset to avoid loading real data
+            def mock_samples(n):
+                yield Sample(prompt="What is 2+2?", target="4")
+
+            # Temporarily replace task samples and mock aiohttp
+            from tasks import TASKS
+
+            original_samples = TASKS["gsm8k_llama"].samples
+            TASKS["gsm8k_llama"].samples = mock_samples
+
+            try:
+                with patch("core.aiohttp.ClientSession") as mock_session:
+                    mock_session.return_value.__aenter__.return_value.post = mock_post
+                    main()
+            finally:
+                TASKS["gsm8k_llama"].samples = original_samples
+
+        finally:
+            sys.argv = original_argv
+
+        # Verify gen_kwargs were correctly parsed and passed to API
         assert captured_payload is not None
         assert captured_payload["temperature"] == 0.7
         assert captured_payload["max_tokens"] == 100
         assert captured_payload["reasoning_effort"] == "medium"
-        assert captured_payload["logit_bias"] == {"42": -100, "1234": 50}
 
 
 class TestTaskAbstraction:
