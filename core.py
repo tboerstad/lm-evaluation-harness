@@ -93,7 +93,6 @@ class APIConfig:
     timeout: int = 300
     max_retries: int = 3
     seed: int = 1234
-    max_tokens: int = 512
 
 
 async def _request(
@@ -131,9 +130,7 @@ async def _request(
 async def complete(
     prompts: list[str | tuple[str, list]],
     config: APIConfig,
-    max_tokens: int = 512,
-    temperature: float = 0.0,
-    stop: list[str] | None = None,
+    gen_kwargs: dict[str, Any] | None = None,
 ) -> list[str]:
     """
     Run batch of chat completions.
@@ -143,9 +140,7 @@ async def complete(
             - str: text-only prompt
             - tuple[str, list]: (text, images) for multimodal
         config: API configuration
-        max_tokens: Max tokens per response
-        temperature: Sampling temperature
-        stop: Stop sequences (max 4)
+        gen_kwargs: Generation kwargs forwarded to API (e.g. max_tokens, temperature, stop)
 
     Returns:
         List of response strings
@@ -173,12 +168,10 @@ async def complete(
             payload: dict[str, Any] = {
                 "model": config.model,
                 "messages": messages,
-                "max_tokens": max_tokens,
-                "temperature": temperature,
                 "seed": config.seed,
             }
-            if stop:
-                payload["stop"] = stop[:4]
+            if gen_kwargs:
+                payload.update(gen_kwargs)
 
             tasks.append(
                 _request(session, config.url, payload, semaphore, config.max_retries)
@@ -245,9 +238,8 @@ async def run_task(
 
     logger.info("Evaluating: %s (%d samples)", task.name, len(samples))
     t0 = time.perf_counter()
-    responses = await complete(
-        prompts, config, max_tokens=config.max_tokens, stop=task.stop or None
-    )
+    gen_kwargs = {"stop": task.stop} if task.stop else None
+    responses = await complete(prompts, config, gen_kwargs=gen_kwargs)
     elapsed = time.perf_counter() - t0
 
     # Score each response
