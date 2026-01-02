@@ -25,8 +25,7 @@ import argparse
 import asyncio
 import json
 
-from core import APIConfig
-from result_types import TaskResult
+from core import APIConfig, TaskResult
 from tasks import TASKS
 
 

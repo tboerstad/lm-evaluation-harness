@@ -15,8 +15,7 @@ import re
 
 import datasets
 
-from core import APIConfig, _normalize, run_task
-from result_types import TaskResult
+from core import APIConfig, TaskResult, _normalize, run_task
 
 logger = logging.getLogger(__name__)
 
