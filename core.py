@@ -19,12 +19,41 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any, TypedDict
+from typing import TypedDict
 
 import aiohttp
 from PIL import Image
 
 logger = logging.getLogger(__name__)
+
+# Type alias for image inputs (PIL Image or base64 string)
+ImageInput = Image.Image | str
+
+
+class ImageURLDetail(TypedDict):
+    url: str
+
+
+class ImageContentPart(TypedDict):
+    type: str
+    image_url: ImageURLDetail
+
+
+class TextContentPart(TypedDict):
+    type: str
+    text: str
+
+
+ContentPart = ImageContentPart | TextContentPart
+
+
+class ChatMessage(TypedDict):
+    role: str
+    content: str | list[ContentPart]
+
+
+# Document type: row from a dataset with string keys
+Document = dict[str, object]
 
 
 class Metrics(TypedDict):
@@ -61,7 +90,7 @@ class APIConfig:
 async def _request(
     session: aiohttp.ClientSession,
     url: str,
-    payload: dict[str, Any],
+    payload: dict[str, str | int | float | list[str] | list[ChatMessage]],
     semaphore: asyncio.Semaphore,
     max_retries: int,
 ) -> str:
@@ -91,7 +120,7 @@ async def _request(
 
 
 async def complete(
-    prompts: list[str | tuple[str, list]],
+    prompts: list[str | tuple[str, list[ImageInput]]],
     config: APIConfig,
     max_tokens: int = 512,
     temperature: float = 0.0,
@@ -132,7 +161,7 @@ async def complete(
             else:
                 messages = [{"role": "user", "content": prompt}]
 
-            payload: dict[str, Any] = {
+            payload: dict[str, str | int | float | list[str] | list[ChatMessage]] = {
                 "model": config.model,
                 "messages": messages,
                 "max_tokens": max_tokens,
@@ -149,9 +178,9 @@ async def complete(
         return list(await asyncio.gather(*tasks))
 
 
-def _build_vision_message(text: str, images: list[Any]) -> list[dict[str, Any]]:
+def _build_vision_message(text: str, images: list[ImageInput]) -> list[ChatMessage]:
     """Build OpenAI vision API message."""
-    content: list[dict[str, Any]] = []
+    content: list[ContentPart] = []
     for img in images:
         if b64 := _encode_image(img):
             content.append(
@@ -164,7 +193,7 @@ def _build_vision_message(text: str, images: list[Any]) -> list[dict[str, Any]]:
     return [{"role": "user", "content": content}]
 
 
-def _encode_image(image: Any) -> str:
+def _encode_image(image: ImageInput) -> str:
     """Encode PIL image to base64, or pass through string."""
     if isinstance(image, str):
         assert not image.startswith("http"), "Remote image URLs are not supported."
@@ -191,8 +220,8 @@ def _normalize(text: str) -> str:
 async def run_task(
     task_name: str,
     config: APIConfig,
-    docs: list[dict[str, Any]],
-    prompt_fn: Callable[[dict[str, Any]], str | tuple[str, list[Any]]],
+    docs: list[Document],
+    prompt_fn: Callable[[Document], str | tuple[str, list[ImageInput]]],
     max_tokens: int = 512,
     stop: list[str] | None = None,
 ) -> tuple[list[str], float]:
