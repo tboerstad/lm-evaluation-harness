@@ -1,19 +1,10 @@
-"""
-GSM8K evaluation - grade school math with chain-of-thought.
-
-Defines:
-- samples(): generator yielding (prompt, target) pairs
-- score(): normalized string matching
-- gsm8k_llama: Task instance for registration
-"""
+"""GSM8K evaluation - grade school math with chain-of-thought."""
 
 from __future__ import annotations
 
 import re
 
-import datasets
-
-from core import Sample, Task, _normalize
+from core import Sample, Task, _normalize, load_samples
 
 GSM8K_FEWSHOT = [
     (
@@ -62,72 +53,41 @@ _GSM8K_TEMPLATE = (
 _NUM_RE = re.compile(r"-?[$0-9.,]{2,}|-?[0-9]+")
 
 
-def _format_gsm8k_prompt(question: str) -> str:
+def _format_prompt(question: str) -> str:
     """Format GSM8K prompt with few-shot examples."""
     parts = [f"{_GSM8K_TEMPLATE.format(question=q)}\n {a}" for q, a in GSM8K_FEWSHOT]
     parts.append(_GSM8K_TEMPLATE.format(question=question))
     return "\n\n".join(parts)
 
 
-def _parse_target(answer: str) -> str:
-    """Parse target answer from GSM8K format, handling missing #### delimiter."""
-    parts = answer.split("####")
-    if len(parts) < 2:
-        return answer.strip()
-    return parts[-1].strip()
-
-
 # Extracts number from "The final answer is 42" format (prompt instructs model to use this)
 _FINAL_ANSWER_RE = re.compile(rf"The final answer is ({_NUM_RE.pattern})")
 
 
-def _extract_gsm8k_answer(response: str) -> str:
+def _extract_answer(response: str) -> str:
     """Extract numeric answer from GSM8K response."""
     if match := _FINAL_ANSWER_RE.search(response):
         return match.group(1)
-    matches = _NUM_RE.findall(response)
-    if matches:
+    if matches := _NUM_RE.findall(response):
         return matches[-1]
     return response
 
 
-def samples(max_samples: int | None = None) -> list[Sample]:
-    """Load GSM8K samples: (formatted_prompt, target_answer).
-
-    Args:
-        max_samples: Optional limit on number of samples to download
-
-    Returns:
-        List of Sample objects
-    """
-    result: list[Sample] = []
-    remaining = max_samples
-    for split in ["test", "train"]:
-        if remaining is not None and remaining <= 0:
-            break
-        ds = datasets.load_dataset("gsm8k", "main", split=split, streaming=True)
-        docs = ds.take(remaining) if remaining is not None else ds
-        for doc in docs:
-            result.append(
-                Sample(
-                    prompt=_format_gsm8k_prompt(doc["question"]),
-                    target=_parse_target(doc["answer"]),
-                )
-            )
-        if remaining is not None:
-            remaining = max_samples - len(result)
-    return result
+def _make_sample(doc: dict) -> Sample:
+    target = (
+        doc["answer"].split("####")[-1].strip()
+        if "####" in doc["answer"]
+        else doc["answer"].strip()
+    )
+    return Sample(prompt=_format_prompt(doc["question"]), target=target)
 
 
-def score(response: str, target: str) -> float:
-    """Score GSM8K response: 1.0 if normalized answer matches, else 0.0."""
-    extracted = _extract_gsm8k_answer(response)
-    return 1.0 if _normalize(extracted) == _normalize(target) else 0.0
+def _score(response: str, target: str) -> float:
+    return 1.0 if _normalize(_extract_answer(response)) == _normalize(target) else 0.0
 
 
-# Task instance for registration
 gsm8k_llama = Task(
     name="gsm8k_llama",
-    samples=samples,
-    score=score,
+    samples=lambda n: load_samples("gsm8k", ["test", "train"], _make_sample, n, "main"),
+    score=_score,
 )

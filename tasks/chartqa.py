@@ -1,19 +1,10 @@
-"""
-ChartQA evaluation - multimodal chart understanding.
-
-Defines:
-- samples(): generator yielding ((prompt, images), target) pairs
-- score(): relaxed matching with 5% numeric tolerance
-- chartqa: Task instance for registration
-"""
+"""ChartQA evaluation - multimodal chart understanding."""
 
 from __future__ import annotations
 
 import re
 
-import datasets
-
-from core import Sample, Task
+from core import Sample, Task, load_samples
 
 # Extracts answer after "FINAL ANSWER:" up to newline or end (prompt instructs model to use this)
 # Non-greedy (.+?) stops at first newline to avoid capturing extra text
@@ -22,8 +13,7 @@ _FINAL_ANSWER_RE = re.compile(r"FINAL ANSWER:\s*(.+?)(?:\n|$)", re.IGNORECASE)
 _NUMERIC_CLEAN_RE = re.compile(r"[$,%]")
 
 
-def _format_chartqa_prompt(query: str) -> str:
-    """Format ChartQA prompt."""
+def _format_prompt(query: str) -> str:
     return (
         f"<image>You are provided a chart image and will be asked a question. "
         f"You have to think through your answer and provide a step-by-step solution. "
@@ -56,44 +46,16 @@ def _relaxed_match(response: str, target: str) -> float:
     return 0.0
 
 
-def samples(max_samples: int | None = None) -> list[Sample]:
-    """Load ChartQA samples: ((prompt, [image]), target).
-
-    Args:
-        max_samples: Optional limit on number of samples to download
-
-    Returns:
-        List of Sample objects
-    """
-    result: list[Sample] = []
-    remaining = max_samples
-    for split in ["test", "val", "train"]:
-        if remaining is not None and remaining <= 0:
-            break
-        ds = datasets.load_dataset("HuggingFaceM4/ChartQA", split=split, streaming=True)
-        docs = ds.take(remaining) if remaining is not None else ds
-        for doc in docs:
-            label = doc["label"]
-            target = label[0] if isinstance(label, list) else str(label)
-            result.append(
-                Sample(
-                    prompt=(_format_chartqa_prompt(doc["query"]), [doc["image"]]),
-                    target=target,
-                )
-            )
-        if remaining is not None:
-            remaining = max_samples - len(result)
-    return result
+def _make_sample(doc: dict) -> Sample:
+    label = doc["label"]
+    target = label[0] if isinstance(label, list) else str(label)
+    return Sample(prompt=(_format_prompt(doc["query"]), [doc["image"]]), target=target)
 
 
-def score(response: str, target: str) -> float:
-    """Score ChartQA response with relaxed matching (5% numeric tolerance)."""
-    return _relaxed_match(response, target)
-
-
-# Task instance for registration
 chartqa = Task(
     name="chartqa",
-    samples=samples,
-    score=score,
+    samples=lambda n: load_samples(
+        "HuggingFaceM4/ChartQA", ["test", "val", "train"], _make_sample, n
+    ),
+    score=_relaxed_match,
 )
