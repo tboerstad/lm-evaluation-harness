@@ -19,12 +19,25 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any
+from typing import Any, TypedDict
 
 import aiohttp
 from PIL import Image
 
 logger = logging.getLogger(__name__)
+
+
+class Metrics(TypedDict):
+    exact_match: float
+    relaxed_accuracy: float
+
+
+class TaskResult(TypedDict):
+    task: str
+    metrics: Metrics
+    num_samples: int
+    elapsed: float
+
 
 # Pre-compiled regex patterns for _normalize
 _NORMALIZE_CURRENCY_RE = re.compile(r"[$,]")

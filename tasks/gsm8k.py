@@ -15,7 +15,7 @@ import re
 
 import datasets
 
-from core import APIConfig, _normalize, run_task
+from core import APIConfig, TaskResult, _normalize, run_task
 
 logger = logging.getLogger(__name__)
 
@@ -102,20 +102,20 @@ def _extract_gsm8k_answer(response: str) -> str:
     return response
 
 
-async def eval_gsm8k(config: APIConfig, limit: int | None = None) -> dict:
+async def eval_gsm8k(config: APIConfig, max_samples: int | None = None) -> TaskResult:
     """
     Evaluate GSM8K - grade school math with chain of thought.
 
-    Returns dict with exact_match, num_samples, time_seconds.
+    Returns TaskResult with exact_match, num_samples, elapsed.
     """
     docs = []
     for split in ["test", "train"]:
         ds = datasets.load_dataset("gsm8k", "main", split=split, streaming=True)
         for doc in ds:
             docs.append(doc)
-            if limit and len(docs) >= limit:
+            if max_samples and len(docs) >= max_samples:
                 break
-        if limit and len(docs) >= limit:
+        if max_samples and len(docs) >= max_samples:
             break
     targets = [_parse_target(d["answer"]) for d in docs]
 
@@ -142,5 +142,5 @@ async def eval_gsm8k(config: APIConfig, limit: int | None = None) -> dict:
         "task": "gsm8k_llama",
         "metrics": metrics,
         "num_samples": len(docs),
-        "time_seconds": round(elapsed, 2),
+        "elapsed": round(elapsed, 2),
     }

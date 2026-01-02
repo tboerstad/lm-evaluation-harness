@@ -15,7 +15,7 @@ import re
 
 import datasets
 
-from core import APIConfig, _normalize, run_task
+from core import APIConfig, TaskResult, _normalize, run_task
 
 logger = logging.getLogger(__name__)
 
@@ -59,20 +59,20 @@ def _relaxed_match(response: str, target: str) -> float:
     return 0.0
 
 
-async def eval_chartqa(config: APIConfig, limit: int | None = None) -> dict:
+async def eval_chartqa(config: APIConfig, max_samples: int | None = None) -> TaskResult:
     """
     Evaluate ChartQA - multimodal chart understanding.
 
-    Returns dict with relaxed_accuracy, num_samples, time_seconds.
+    Returns TaskResult with relaxed_accuracy, num_samples, elapsed.
     """
     docs = []
     for split in ["test", "val", "train"]:
         ds = datasets.load_dataset("HuggingFaceM4/ChartQA", split=split, streaming=True)
         for doc in ds:
             docs.append(doc)
-            if limit and len(docs) >= limit:
+            if max_samples and len(docs) >= max_samples:
                 break
-        if limit and len(docs) >= limit:
+        if max_samples and len(docs) >= max_samples:
             break
 
     targets = [
@@ -101,5 +101,5 @@ async def eval_chartqa(config: APIConfig, limit: int | None = None) -> dict:
         "task": "chartqa",
         "metrics": metrics,
         "num_samples": len(docs),
-        "time_seconds": round(elapsed, 2),
+        "elapsed": round(elapsed, 2),
     }

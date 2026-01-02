@@ -195,7 +195,7 @@ class TestIntegration:
             )
 
             config = APIConfig(url="http://test.com/v1/chat/completions", model="test")
-            result = asyncio.run(evaluate(["gsm8k_llama"], config, limit=1))
+            result = asyncio.run(evaluate(["gsm8k_llama"], config, max_samples=1))
 
         assert result["results"]["gsm8k_llama"]["metrics"]["exact_match"] == 1.0
         assert result["results"]["gsm8k_llama"]["num_samples"] == 1
