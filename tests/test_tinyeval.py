@@ -105,8 +105,8 @@ class TestE2E:
             mock_post,
         )
 
-        assert captured_payload["temperature"] == "0.7"
-        assert captured_payload["max_tokens"] == "100"
+        assert captured_payload["temperature"] == 0.7
+        assert captured_payload["max_tokens"] == 100
         assert captured_payload["reasoning_effort"] == "medium"
 
     def test_invalid_task_raises_error(self):
