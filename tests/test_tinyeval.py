@@ -184,6 +184,61 @@ class TestHTTPClient:
 
         assert responses[0] == "I see a chart"
 
+    def test_gen_kwargs_types_in_request(self):
+        """gen_kwargs are properly typed in request payload."""
+        config = APIConfig(
+            url="http://test.com/v1/chat/completions",
+            model="test-model",
+            gen_kwargs={
+                "temperature": 0.7,
+                "max_tokens": 100,
+                "reasoning_effort": "medium",
+                "logit_bias": {"42": -100, "1234": 50},
+            },
+        )
+
+        captured_payload = None
+
+        class MockResp:
+            ok = True
+
+            async def json(self):
+                return {"choices": [{"message": {"content": "test response"}}]}
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+        class MockContextManager:
+            def __init__(self, json_payload):
+                nonlocal captured_payload
+                captured_payload = json_payload
+
+            async def __aenter__(self):
+                return MockResp()
+
+            async def __aexit__(self, *args):
+                pass
+
+        def mock_post(url, json=None):
+            return MockContextManager(json)
+
+        with patch("core.aiohttp.ClientSession") as mock_session:
+            mock_session.return_value.__aenter__.return_value.post = mock_post
+            asyncio.run(complete(["test prompt"], config))
+
+        assert captured_payload is not None
+        assert isinstance(captured_payload["temperature"], float)
+        assert captured_payload["temperature"] == 0.7
+        assert isinstance(captured_payload["max_tokens"], int)
+        assert captured_payload["max_tokens"] == 100
+        assert isinstance(captured_payload["reasoning_effort"], str)
+        assert captured_payload["reasoning_effort"] == "medium"
+        assert isinstance(captured_payload["logit_bias"], dict)
+        assert captured_payload["logit_bias"] == {"42": -100, "1234": 50}
+
 
 class TestTaskAbstraction:
     """Task dataclass and run_task function."""
