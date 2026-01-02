@@ -61,6 +61,10 @@ _GSM8K_TEMPLATE = (
 # - "-?[0-9]+": simple integers like "5" (catches single digits the first pattern misses)
 _NUM_RE = re.compile(r"-?[$0-9.,]{2,}|-?[0-9]+")
 
+# Strip GSM8K chain-of-thought prefix: "reasoning steps #### final_answer" -> "final_answer"
+# (?s) enables DOTALL so .* matches across newlines
+_THOUGHT_RE = re.compile(r"(?s).*#### ")
+
 
 def _format_gsm8k_prompt(question: str) -> str:
     """Format GSM8K prompt with few-shot examples."""
@@ -119,10 +123,16 @@ def samples(max_samples: int | None = None) -> list[Sample]:
     return result
 
 
+def _normalize_gsm8k(text: str) -> str:
+    """Normalize GSM8K text: strip chain-of-thought prefix, then generic normalization."""
+    text = _THOUGHT_RE.sub("", text)
+    return _normalize(text)
+
+
 def score(response: str, target: str) -> float:
     """Score GSM8K response: 1.0 if normalized answer matches, else 0.0."""
     extracted = _extract_gsm8k_answer(response)
-    return 1.0 if _normalize(extracted) == _normalize(target) else 0.0
+    return 1.0 if _normalize_gsm8k(extracted) == _normalize_gsm8k(target) else 0.0
 
 
 # Task instance for registration
