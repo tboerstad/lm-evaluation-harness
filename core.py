@@ -153,6 +153,7 @@ async def complete(
         connector=connector,
         timeout=aiohttp.ClientTimeout(total=config.timeout),
         headers=headers,
+        trust_env=True,
     ) as session:
         tasks = []
         for prompt in prompts:
