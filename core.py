@@ -218,7 +218,10 @@ def _normalize(text: str) -> str:
 
 
 async def run_task(
-    task: Task, config: APIConfig, max_samples: int | None = None
+    task: Task,
+    config: APIConfig,
+    max_samples: int | None = None,
+    gen_kwargs: dict[str, Any] | None = None,
 ) -> TaskResult:
     """
     Evaluate a task: collect samples, run inference, compute scores.
@@ -227,6 +230,7 @@ async def run_task(
         task: Task definition with samples generator and scoring function
         config: API configuration
         max_samples: Optional limit on number of samples
+        gen_kwargs: Generation kwargs forwarded to API (e.g. max_tokens, temperature)
 
     Returns:
         TaskResult with metrics, sample count, and elapsed time
@@ -236,7 +240,7 @@ async def run_task(
 
     logger.info("Evaluating: %s (%d samples)", task.name, len(samples))
     t0 = time.perf_counter()
-    responses = await complete(prompts, config)
+    responses = await complete(prompts, config, gen_kwargs)
     elapsed = time.perf_counter() - t0
 
     # Score each response
