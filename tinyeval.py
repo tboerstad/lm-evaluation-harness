@@ -25,11 +25,18 @@ import argparse
 import asyncio
 import json
 
+from typing import TypedDict
+
 from core import APIConfig, TaskResult, run_task
 from tasks import TASKS
 
 
-def _parse_kwargs(s: str) -> dict:
+class EvalResult(TypedDict):
+    results: dict[str, TaskResult]
+    total_seconds: float
+
+
+def _parse_kwargs(s: str) -> dict[str, str | int | float]:
     """Parse 'key=value,key=value' into dict."""
     return (
         {k: json.loads(v) for k, v in (p.split("=", 1) for p in s.split(","))}
@@ -40,7 +47,7 @@ def _parse_kwargs(s: str) -> dict:
 
 async def evaluate(
     task_names: list[str], config: APIConfig, max_samples: int | None = None
-) -> dict[str, TaskResult | float]:
+) -> EvalResult:
     """Run evaluations for specified tasks."""
     results: dict[str, TaskResult] = {}
     total_seconds = 0.0
