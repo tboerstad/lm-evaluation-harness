@@ -94,7 +94,7 @@ class APIConfig:
 
     url: str
     model: str
-    seed: int  # Required - set via CLI --seed flag
+    seed: int
     api_key: str = ""
     num_concurrent: int = 8
     timeout: int = 300
