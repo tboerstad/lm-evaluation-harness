@@ -6,7 +6,6 @@ Responsibilities:
 - Sample/Task: minimal task abstraction (generator + scorer)
 - complete(): async batch chat completions (OpenAI-compatible)
 - run_task(): evaluate a Task, return TaskResult
-- _normalize(): text normalization for comparison
 - _encode_image(): PIL→base64; rejects remote URLs
 """
 
@@ -15,7 +14,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -71,18 +69,6 @@ class Task:
     name: str
     samples: Callable[[int | None], list[Sample]]  # (max_samples) -> samples
     score: Callable[[str, str], float]  # (response, target) -> score
-
-
-# Pre-compiled regex patterns for _normalize
-_NORMALIZE_CURRENCY_RE = re.compile(
-    r"[$,]"
-)  # Strip currency symbols: "$1,234" -> "1234"
-_NORMALIZE_THOUGHT_RE = re.compile(
-    r"(?s).*#### "
-)  # Strip GSM8K chain-of-thought prefix
-# GSM8K answers are formatted as "reasoning steps #### final_answer"
-# (?s) enables DOTALL so .* matches across newlines
-_NORMALIZE_END_RE = re.compile(r"\.$")  # Strip trailing period: "42." -> "42"
 
 
 MAX_BACKOFF = 8  # Cap exponential backoff at 8 seconds
@@ -203,14 +189,6 @@ def _encode_image(image: Any) -> str:
         return base64.b64encode(buf.getvalue()).decode()
 
     raise TypeError(f"Unsupported image type: {type(image).__name__}")
-
-
-def _normalize(text: str) -> str:
-    """Normalize text for comparison."""
-    text = _NORMALIZE_CURRENCY_RE.sub("", text)
-    text = _NORMALIZE_THOUGHT_RE.sub("", text)
-    text = _NORMALIZE_END_RE.sub("", text)
-    return text.lower().strip()
 
 
 async def run_task(

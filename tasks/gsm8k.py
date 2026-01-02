@@ -13,7 +13,7 @@ import re
 
 import datasets
 
-from core import Sample, Task, _normalize
+from core import Sample, Task
 
 GSM8K_FEWSHOT = [
     (
@@ -60,6 +60,19 @@ _GSM8K_TEMPLATE = (
 # - "-?[$0-9.,]{2,}": formatted numbers like "$1,234.56" (2+ chars to avoid lone punctuation)
 # - "-?[0-9]+": simple integers like "5" (catches single digits the first pattern misses)
 _NUM_RE = re.compile(r"-?[$0-9.,]{2,}|-?[0-9]+")
+
+# Pre-compiled regex patterns for _normalize
+_NORMALIZE_CURRENCY_RE = re.compile(r"[$,]")
+_NORMALIZE_THOUGHT_RE = re.compile(r"(?s).*#### ")
+_NORMALIZE_END_RE = re.compile(r"\.$")
+
+
+def _normalize(text: str) -> str:
+    """Normalize GSM8K text for comparison."""
+    text = _NORMALIZE_CURRENCY_RE.sub("", text)
+    text = _NORMALIZE_THOUGHT_RE.sub("", text)
+    text = _NORMALIZE_END_RE.sub("", text)
+    return text.lower().strip()
 
 
 def _format_gsm8k_prompt(question: str) -> str:
