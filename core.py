@@ -20,6 +20,7 @@ import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from io import BytesIO
+from itertools import islice
 from typing import Any, TypedDict
 
 import aiohttp
@@ -56,20 +57,20 @@ class Task:
         # Text-only task
         Task(
             name="gsm8k",
-            samples=lambda n: (Sample(prompt, target) for prompt, target in data[:n]),
+            samples=lambda: (Sample(prompt, target) for prompt, target in data),
             score=lambda response, target: 1.0 if response == target else 0.0,
         )
 
         # Multimodal task
         Task(
             name="chartqa",
-            samples=lambda n: (Sample((text, [img]), target) for ...),
+            samples=lambda: (Sample((text, [img]), target) for ...),
             score=relaxed_match,
         )
     """
 
     name: str
-    samples: Callable[[int | None], Iterator[Sample]]  # max_samples -> samples
+    samples: Callable[[], Iterator[Sample]]  # generator of samples
     score: Callable[[str, str], float]  # (response, target) -> score
 
 
@@ -232,7 +233,7 @@ async def run_task(
     Returns:
         TaskResult with metrics, sample count, and elapsed time
     """
-    samples = list(task.samples(max_samples))
+    samples = list(islice(task.samples(), max_samples))
     prompts = [s.prompt for s in samples]
 
     logger.info("Evaluating: %s (%d samples)", task.name, len(samples))

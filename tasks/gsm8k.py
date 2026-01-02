@@ -92,9 +92,8 @@ def _extract_gsm8k_answer(response: str) -> str:
     return response
 
 
-def samples(max_samples: int | None = None) -> Iterator[Sample]:
+def samples() -> Iterator[Sample]:
     """Generate GSM8K samples: (formatted_prompt, target_answer)."""
-    count = 0
     for split in ["test", "train"]:
         ds = datasets.load_dataset("gsm8k", "main", split=split, streaming=True)
         for doc in ds:
@@ -102,9 +101,6 @@ def samples(max_samples: int | None = None) -> Iterator[Sample]:
                 prompt=_format_gsm8k_prompt(doc["question"]),
                 target=_parse_target(doc["answer"]),
             )
-            count += 1
-            if max_samples and count >= max_samples:
-                return
 
 
 def score(response: str, target: str) -> float:

@@ -18,12 +18,12 @@ from tinyeval import evaluate, main
 
 
 # Reusable mock sample generators
-def _single_sample(_n: int | None) -> Iterator[Sample]:
+def _single_sample() -> Iterator[Sample]:
     """Single sample for basic tests."""
     yield Sample(prompt="What is 2+2?", target="4")
 
 
-def _multi_sample(_n: int | None) -> Iterator[Sample]:
+def _multi_sample() -> Iterator[Sample]:
     """Multiple samples for concurrency tests."""
     for i in range(5):
         yield Sample(prompt=f"Question {i}?", target="42")
@@ -47,7 +47,7 @@ class MockResp:
         pass
 
 
-SamplesFn = Callable[[int | None], Iterator[Sample]]
+SamplesFn = Callable[[], Iterator[Sample]]
 
 
 @contextmanager
@@ -159,9 +159,9 @@ class TestE2E:
             lambda url, **kwargs: TrackingMockResp(),
         )
 
-        assert max_concurrent_seen <= 2, (
-            f"Expected max 2 concurrent, saw {max_concurrent_seen}"
-        )
+        assert (
+            max_concurrent_seen <= 2
+        ), f"Expected max 2 concurrent, saw {max_concurrent_seen}"
 
     def test_model_args_passed_to_config(self):
         """model_args CLI arg flows through to APIConfig and API request."""
