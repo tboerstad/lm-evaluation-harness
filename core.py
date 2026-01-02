@@ -30,7 +30,6 @@ logger = logging.getLogger(__name__)
 
 class Metrics(TypedDict):
     exact_match: float
-    relaxed_accuracy: float
 
 
 class TaskResult(TypedDict):
@@ -195,7 +194,8 @@ def _build_vision_message(text: str, images: list[Any]) -> list[dict[str, Any]]:
 def _encode_image(image: Any) -> str:
     """Encode PIL image to base64, or pass through string."""
     if isinstance(image, str):
-        assert not image.startswith("http"), "Remote image URLs are not supported."
+        if image.startswith("http"):
+            raise ValueError("Remote image URLs are not supported.")
         return image
 
     if isinstance(image, Image.Image):
@@ -246,7 +246,7 @@ async def run_task(
 
     return {
         "task": task.name,
-        "metrics": {"exact_match": accuracy, "relaxed_accuracy": accuracy},
+        "metrics": {"exact_match": accuracy},
         "num_samples": len(samples),
         "elapsed": round(elapsed, 2),
     }

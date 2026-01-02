@@ -57,7 +57,7 @@ _GSM8K_TEMPLATE = (
     'Your response should end with "The final answer is [answer]" where [answer] is the response to the problem.'
 )
 
-_NUM_PATTERN = r"-?[$0-9.,]{2,}|-?[0-9]+"
+_NUM_RE = re.compile(r"-?[$0-9.,]{2,}|-?[0-9]+")
 
 
 def _format_gsm8k_prompt(question: str) -> str:
@@ -75,11 +75,14 @@ def _parse_target(answer: str) -> str:
     return parts[-1].strip()
 
 
+_FINAL_ANSWER_RE = re.compile(rf"The final answer is ({_NUM_RE.pattern})")
+
+
 def _extract_gsm8k_answer(response: str) -> str:
     """Extract numeric answer from GSM8K response."""
-    if match := re.search(rf"The final answer is ({_NUM_PATTERN})", response):
+    if match := _FINAL_ANSWER_RE.search(response):
         return match.group(1)
-    matches = re.findall(rf"({_NUM_PATTERN})", response)
+    matches = _NUM_RE.findall(response)
     if matches:
         return matches[-1]
     return response

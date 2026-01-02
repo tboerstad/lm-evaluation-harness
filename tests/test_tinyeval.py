@@ -6,6 +6,7 @@ Tests the full workflow: CLI args → API call → JSON output.
 
 import asyncio
 import sys
+from contextlib import contextmanager
 from unittest.mock import patch
 
 import pytest
@@ -15,30 +16,27 @@ from tasks import TASKS
 from tinyeval import evaluate, main
 
 
-def _mock_api_response(content: str):
-    """Create mock aiohttp session that returns the given content."""
+class MockResp:
+    """Mock aiohttp response."""
 
-    class MockResp:
-        ok = True
+    ok = True
 
-        async def json(self):
-            return {"choices": [{"message": {"content": content}}]}
+    def __init__(self, content: str = "42"):
+        self._content = content
 
-        async def __aenter__(self):
-            return self
+    async def json(self):
+        return {"choices": [{"message": {"content": self._content}}]}
 
-        async def __aexit__(self, *args):
-            pass
+    async def __aenter__(self):
+        return self
 
-    class MockSession:
-        def post(self, url, **kwargs):
-            return MockResp()
-
-    return MockSession()
+    async def __aexit__(self, *args):
+        pass
 
 
-def _run_cli(args: list[str], mock_samples: dict[str, callable], api_response: str):
-    """Run tinyeval CLI with mocked API and samples."""
+@contextmanager
+def cli_context(args: list[str], mock_samples: dict[str, callable]):
+    """Context manager for CLI tests: manages sys.argv and TASKS state."""
     original_argv = sys.argv
     original_samples = {name: TASKS[name].samples for name in mock_samples}
 
@@ -46,16 +44,19 @@ def _run_cli(args: list[str], mock_samples: dict[str, callable], api_response: s
         sys.argv = ["tinyeval"] + args
         for name, samples_fn in mock_samples.items():
             TASKS[name].samples = samples_fn
-
-        with patch("core.aiohttp.ClientSession") as mock_session:
-            mock_session.return_value.__aenter__.return_value = _mock_api_response(
-                api_response
-            )
-            main()
+        yield
     finally:
         sys.argv = original_argv
         for name, samples_fn in original_samples.items():
             TASKS[name].samples = samples_fn
+
+
+def run_cli_with_mock(args: list[str], mock_samples: dict[str, callable], post_fn):
+    """Run CLI with mocked API post function."""
+    with cli_context(args, mock_samples):
+        with patch("core.aiohttp.ClientSession") as mock_session:
+            mock_session.return_value.__aenter__.return_value.post = post_fn
+            main()
 
 
 class TestE2E:
@@ -67,7 +68,7 @@ class TestE2E:
         def mock_samples(n):
             yield Sample(prompt="What is 2+2?", target="4")
 
-        _run_cli(
+        run_cli_with_mock(
             [
                 "--tasks",
                 "gsm8k_llama",
@@ -77,7 +78,7 @@ class TestE2E:
                 "1",
             ],
             {"gsm8k_llama": mock_samples},
-            "The final answer is 4",
+            lambda url, **kwargs: MockResp("The final answer is 4"),
         )
 
         output = capsys.readouterr().out
@@ -88,18 +89,6 @@ class TestE2E:
         """gen_kwargs CLI arg flows through to API request payload."""
         captured_payload = None
 
-        class MockResp:
-            ok = True
-
-            async def json(self):
-                return {"choices": [{"message": {"content": "42"}}]}
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *args):
-                pass
-
         def mock_post(url, **kwargs):
             nonlocal captured_payload
             captured_payload = kwargs.get("json")
@@ -108,12 +97,8 @@ class TestE2E:
         def mock_samples(n):
             yield Sample(prompt="What is 2+2?", target="4")
 
-        original_argv = sys.argv
-        original_samples = TASKS["gsm8k_llama"].samples
-
-        try:
-            sys.argv = [
-                "tinyeval",
+        run_cli_with_mock(
+            [
                 "--tasks",
                 "gsm8k_llama",
                 "--model_args",
@@ -122,15 +107,10 @@ class TestE2E:
                 "1",
                 "--gen_kwargs",
                 'temperature=0.7,max_tokens=100,reasoning_effort="medium"',
-            ]
-            TASKS["gsm8k_llama"].samples = mock_samples
-
-            with patch("core.aiohttp.ClientSession") as mock_session:
-                mock_session.return_value.__aenter__.return_value.post = mock_post
-                main()
-        finally:
-            sys.argv = original_argv
-            TASKS["gsm8k_llama"].samples = original_samples
+            ],
+            {"gsm8k_llama": mock_samples},
+            mock_post,
+        )
 
         assert captured_payload["temperature"] == 0.7
         assert captured_payload["max_tokens"] == 100
@@ -147,69 +127,38 @@ class TestE2E:
         active_requests = 0
         max_concurrent_seen = 0
 
-        class MockResp:
-            ok = True
-
-            async def json(self):
-                return {"choices": [{"message": {"content": "42"}}]}
-
+        class TrackingMockResp(MockResp):
             async def __aenter__(self):
                 nonlocal active_requests, max_concurrent_seen
                 active_requests += 1
                 max_concurrent_seen = max(max_concurrent_seen, active_requests)
-                await asyncio.sleep(0.01)  # Simulate network delay
+                await asyncio.sleep(0.01)
                 return self
 
             async def __aexit__(self, *args):
                 nonlocal active_requests
                 active_requests -= 1
 
-        def mock_post(url, **kwargs):
-            return MockResp()
-
         def mock_samples(n):
             for i in range(5):
                 yield Sample(prompt=f"Question {i}?", target="42")
 
-        original_argv = sys.argv
-        original_samples = TASKS["gsm8k_llama"].samples
-
-        try:
-            sys.argv = [
-                "tinyeval",
+        run_cli_with_mock(
+            [
                 "--tasks",
                 "gsm8k_llama",
                 "--model_args",
                 'model="test-model",base_url="http://test.com/v1",num_concurrent=2',
-            ]
-            TASKS["gsm8k_llama"].samples = mock_samples
+            ],
+            {"gsm8k_llama": mock_samples},
+            lambda url, **kwargs: TrackingMockResp(),
+        )
 
-            with patch("core.aiohttp.ClientSession") as mock_session:
-                mock_session.return_value.__aenter__.return_value.post = mock_post
-                main()
-        finally:
-            sys.argv = original_argv
-            TASKS["gsm8k_llama"].samples = original_samples
-
-        assert (
-            max_concurrent_seen <= 2
-        ), f"Expected max 2 concurrent, saw {max_concurrent_seen}"
+        assert max_concurrent_seen <= 2, f"Expected max 2 concurrent, saw {max_concurrent_seen}"
 
     def test_model_args_passed_to_config(self):
-        """model_args CLI arg flows through to APIConfig and API request (lm_eval compat)."""
+        """model_args CLI arg flows through to APIConfig and API request."""
         captured_payload = None
-
-        class MockResp:
-            ok = True
-
-            async def json(self):
-                return {"choices": [{"message": {"content": "42"}}]}
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *args):
-                pass
 
         def mock_post(url, **kwargs):
             nonlocal captured_payload
@@ -219,27 +168,17 @@ class TestE2E:
         def mock_samples(n):
             yield Sample(prompt="What is 2+2?", target="4")
 
-        original_argv = sys.argv
-        original_samples = TASKS["gsm8k_llama"].samples
-
-        try:
-            # lm_eval compatible: model and base_url via model_args only
-            sys.argv = [
-                "tinyeval",
+        run_cli_with_mock(
+            [
                 "--tasks",
                 "gsm8k_llama",
                 "--max_samples",
                 "1",
                 "--model_args",
                 'model="test-model",base_url="http://test.com/v1",num_concurrent=4,max_retries=5',
-            ]
-            TASKS["gsm8k_llama"].samples = mock_samples
-
-            with patch("core.aiohttp.ClientSession") as mock_session:
-                mock_session.return_value.__aenter__.return_value.post = mock_post
-                main()
-        finally:
-            sys.argv = original_argv
-            TASKS["gsm8k_llama"].samples = original_samples
+            ],
+            {"gsm8k_llama": mock_samples},
+            mock_post,
+        )
 
         assert captured_payload["model"] == "test-model"
