@@ -1,8 +1,4 @@
-"""
-End-to-end tests for tinyeval CLI.
-
-Tests the full workflow: CLI args → API call → JSON output.
-"""
+"""End-to-end tests for tinyeval CLI."""
 
 import asyncio
 import sys
@@ -11,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from core import APIConfig, Sample, Task
-from tasks.gsm8k import score as gsm8k_score
+from tasks.gsm8k import _score as gsm8k_score
 from tinyeval import evaluate, main
 
 

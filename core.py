@@ -1,14 +1,4 @@
-"""
-Core utilities for tinyeval.
-
-Responsibilities:
-- APIConfig: endpoint, model, concurrency, timeout
-- Sample/Task: minimal task abstraction (generator + scorer)
-- complete(): async batch chat completions (OpenAI-compatible)
-- run_task(): evaluate a Task, return TaskResult
-- _normalize(): text normalization for comparison
-- _encode_image(): PIL→base64; rejects remote URLs
-"""
+"""Core utilities for tinyeval."""
 
 from __future__ import annotations
 
@@ -22,10 +12,32 @@ from dataclasses import dataclass, field
 from io import BytesIO
 from typing import Any, TypedDict
 
+import datasets
 import httpx
 from PIL import Image
 
 logger = logging.getLogger(__name__)
+
+
+def load_samples(
+    dataset: str,
+    splits: list[str],
+    make_sample: Callable[[dict], Sample],
+    max_samples: int | None = None,
+    config: str | None = None,
+) -> list[Sample]:
+    """Load samples from HuggingFace dataset across splits."""
+    result: list[Sample] = []
+    remaining = max_samples
+    for split in splits:
+        if remaining is not None and remaining <= 0:
+            break
+        ds = datasets.load_dataset(dataset, config, split=split, streaming=True)
+        for doc in ds.take(remaining) if remaining is not None else ds:
+            result.append(make_sample(doc))
+        if remaining is not None:
+            remaining = max_samples - len(result)
+    return result
 
 
 class Metrics(TypedDict):
@@ -43,34 +55,17 @@ class TaskResult(TypedDict):
 class Sample:
     """A single evaluation sample: prompt + expected target."""
 
-    prompt: str | tuple[str, list[Any]]  # text or (text, images) for multimodal
+    prompt: str | tuple[str, list[Any]]
     target: str
 
 
 @dataclass(frozen=True)
 class Task:
-    """
-    Minimal task definition: a loader of samples + a scoring function.
-
-    Examples:
-        # Text-only task
-        Task(
-            name="gsm8k",
-            samples=lambda max_samples: load_samples(max_samples),
-            score=lambda response, target: 1.0 if response == target else 0.0,
-        )
-
-        # Multimodal task
-        Task(
-            name="chartqa",
-            samples=lambda max_samples: load_chartqa(max_samples),
-            score=relaxed_match,
-        )
-    """
+    """Minimal task definition: a loader of samples + a scoring function."""
 
     name: str
-    samples: Callable[[int | None], list[Sample]]  # (max_samples) -> samples
-    score: Callable[[str, str], float]  # (response, target) -> score
+    samples: Callable[[int | None], list[Sample]]
+    score: Callable[[str, str], float]
 
 
 MAX_BACKOFF = 8  # Cap exponential backoff at 8 seconds
@@ -115,21 +110,9 @@ async def _request(
 
 
 async def complete(
-    prompts: list[str | tuple[str, list]],
-    config: APIConfig,
+    prompts: list[str | tuple[str, list]], config: APIConfig
 ) -> list[str]:
-    """
-    Run batch of chat completions.
-
-    Args:
-        prompts: List of prompts. Each is either:
-            - str: text-only prompt
-            - tuple[str, list]: (text, images) for multimodal
-        config: API configuration (includes gen_kwargs for temperature, max_tokens, etc.)
-
-    Returns:
-        List of response strings
-    """
+    """Run batch of chat completions. Prompts can be str or (text, images) tuples."""
     headers = {"Content-Type": "application/json"}
     if config.api_key:
         headers["Authorization"] = f"Bearer {config.api_key}"
@@ -195,26 +178,14 @@ def _encode_image(image: Any) -> str:
 
 def _normalize(text: str) -> str:
     """Normalize text for comparison."""
-    text = re.sub(r"[$,]", "", text)
     text = re.sub(r"(?s).*#### ", "", text)
-    text = re.sub(r"\.$", "", text)
-    return text.lower().strip()
+    return re.sub(r"[$,]|\.$", "", text).lower().strip()
 
 
 async def run_task(
     task: Task, config: APIConfig, max_samples: int | None = None
 ) -> TaskResult:
-    """
-    Evaluate a task: collect samples, run inference, compute scores.
-
-    Args:
-        task: Task definition with samples loader and scoring function
-        config: API configuration (includes gen_kwargs for temperature, max_tokens, etc.)
-        max_samples: Optional limit on number of samples
-
-    Returns:
-        TaskResult with metrics, sample count, and elapsed time
-    """
+    """Evaluate a task: collect samples, run inference, compute scores."""
     samples = task.samples(max_samples)
     prompts = [s.prompt for s in samples]
 
