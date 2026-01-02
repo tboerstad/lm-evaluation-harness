@@ -29,6 +29,20 @@ from core import APIConfig, TaskResult, run_task
 from tasks import TASKS
 
 
+def _parse_gen_kwargs(s: str) -> dict:
+    """Parse 'key=value,key=value' into dict."""
+    if not s:
+        return {}
+    result = {}
+    for pair in s.split(","):
+        key, _, value = pair.partition("=")
+        try:
+            result[key.strip()] = json.loads(value.strip())
+        except json.JSONDecodeError:
+            result[key.strip()] = value.strip()
+    return result
+
+
 async def evaluate(
     task_names: list[str], config: APIConfig, max_samples: int | None = None
 ) -> dict[str, TaskResult | float]:
@@ -62,8 +76,8 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument(
         "--gen_kwargs",
-        default="{}",
-        help='Generation kwargs as JSON (e.g. \'{"temperature": 0.7, "max_tokens": 1024}\')',
+        default="",
+        help="Generation kwargs (e.g. temperature=0.7,max_tokens=1024)",
     )
     parser.add_argument("--output", help="Output JSON file")
     args = parser.parse_args()
@@ -74,7 +88,7 @@ def main() -> int:
         api_key=args.api_key,
         num_concurrent=args.num_concurrent,
         seed=args.seed,
-        gen_kwargs=json.loads(args.gen_kwargs),
+        gen_kwargs=_parse_gen_kwargs(args.gen_kwargs),
     )
 
     task_names = [t.strip() for t in args.tasks.split(",") if t.strip()]
