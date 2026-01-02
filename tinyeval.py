@@ -29,28 +29,6 @@ from core import APIConfig, TaskResult, run_task
 from tasks import TASKS
 
 
-def _parse_gen_kwargs(s: str) -> dict:
-    """Parse 'key=value,key=value' into dict with type inference."""
-    if not s:
-        return {}
-    result = {}
-    for pair in s.split(","):
-        key, _, value = pair.partition("=")
-        key = key.strip()
-        value = value.strip()
-        # Type inference
-        if value.lower() in ("true", "false"):
-            result[key] = value.lower() == "true"
-        elif value.isdigit() or (value.startswith("-") and value[1:].isdigit()):
-            result[key] = int(value)
-        else:
-            try:
-                result[key] = float(value)
-            except ValueError:
-                result[key] = value
-    return result
-
-
 async def evaluate(
     task_names: list[str], config: APIConfig, max_samples: int | None = None
 ) -> dict[str, TaskResult | float]:
@@ -84,8 +62,8 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument(
         "--gen_kwargs",
-        default="",
-        help="Generation kwargs: key=value,key=value (e.g. temperature=0.7,max_tokens=1024)",
+        default="{}",
+        help='Generation kwargs as JSON (e.g. \'{"temperature": 0.7, "max_tokens": 1024}\')',
     )
     parser.add_argument("--output", help="Output JSON file")
     args = parser.parse_args()
@@ -96,7 +74,7 @@ def main() -> int:
         api_key=args.api_key,
         num_concurrent=args.num_concurrent,
         seed=args.seed,
-        gen_kwargs=_parse_gen_kwargs(args.gen_kwargs),
+        gen_kwargs=json.loads(args.gen_kwargs),
     )
 
     task_names = [t.strip() for t in args.tasks.split(",") if t.strip()]
