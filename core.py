@@ -164,13 +164,15 @@ def _build_vision_message(text: str, images: list[Any]) -> list[dict[str, Any]]:
     """Build OpenAI vision API message."""
     content: list[dict[str, Any]] = []
     for img in images:
-        if b64 := _encode_image(img):
-            content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{b64}"},
-                }
-            )
+        b64 = _encode_image(img)
+        if not b64:
+            raise ValueError(f"Failed to encode image: {type(img).__name__}")
+        content.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{b64}"},
+            }
+        )
     content.append({"type": "text", "text": text.replace("<image>", "").strip()})
     return [{"role": "user", "content": content}]
 

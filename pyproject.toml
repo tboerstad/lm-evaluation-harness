@@ -18,9 +18,9 @@ dependencies = [
     # Dataset loading (HuggingFace datasets for benchmarks)
     "datasets>=2.16.0,<4.0",
     # HTTP client
-    "httpx",
+    "httpx>=0.24.0,<1.0",
     # Image handling (for multimodal tasks)
-    "pillow",
+    "pillow>=9.0.0,<12.0",
 ]
 
 [project.scripts]

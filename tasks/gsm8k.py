@@ -59,7 +59,7 @@ _GSM8K_TEMPLATE = (
 # Matches numbers in two forms:
 # - "-?[$0-9.,]{2,}": formatted numbers like "$1,234.56" (2+ chars to avoid lone punctuation)
 # - "-?[0-9]+": simple integers like "5" (catches single digits the first pattern misses)
-_NUM_RE = re.compile(r"-?[$0-9.,]{2,}|-?[0-9]+")
+_NUM_PATTERN = r"-?[$0-9.,]{2,}|-?[0-9]+"
 
 
 def _format_gsm8k_prompt(question: str) -> str:
@@ -78,14 +78,14 @@ def _parse_target(answer: str) -> str:
 
 
 # Extracts number from "The final answer is 42" format (prompt instructs model to use this)
-_FINAL_ANSWER_RE = re.compile(rf"The final answer is ({_NUM_RE.pattern})")
+_FINAL_ANSWER_PATTERN = rf"The final answer is ({_NUM_PATTERN})"
 
 
 def _extract_gsm8k_answer(response: str) -> str:
     """Extract numeric answer from GSM8K response."""
-    if match := _FINAL_ANSWER_RE.search(response):
+    if match := re.search(_FINAL_ANSWER_PATTERN, response):
         return match.group(1)
-    matches = _NUM_RE.findall(response)
+    matches = re.findall(_NUM_PATTERN, response)
     if matches:
         return matches[-1]
     return response

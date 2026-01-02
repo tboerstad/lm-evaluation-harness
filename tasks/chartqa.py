@@ -17,9 +17,9 @@ from core import Sample, Task
 
 # Extracts answer after "FINAL ANSWER:" up to newline or end (prompt instructs model to use this)
 # Non-greedy (.+?) stops at first newline to avoid capturing extra text
-_FINAL_ANSWER_RE = re.compile(r"FINAL ANSWER:\s*(.+?)(?:\n|$)", re.IGNORECASE)
+_FINAL_ANSWER_PATTERN = r"(?i)FINAL ANSWER:\s*(.+?)(?:\n|$)"
 # Strip currency/percent symbols for numeric comparison: "$1,234%" -> "1234"
-_NUMERIC_CLEAN_RE = re.compile(r"[$,%]")
+_NUMERIC_CLEAN_PATTERN = r"[$,%]"
 
 
 def _format_chartqa_prompt(query: str) -> str:
@@ -35,7 +35,7 @@ def _format_chartqa_prompt(query: str) -> str:
 
 def _relaxed_match(response: str, target: str) -> float:
     """ChartQA metric: exact match or 5% numeric tolerance."""
-    if match := _FINAL_ANSWER_RE.search(response):
+    if match := re.search(_FINAL_ANSWER_PATTERN, response):
         pred = match.group(1).strip()
     else:
         pred = response.strip()
@@ -44,8 +44,8 @@ def _relaxed_match(response: str, target: str) -> float:
         return 1.0
 
     try:
-        pred_n = float(_NUMERIC_CLEAN_RE.sub("", pred))
-        target_n = float(_NUMERIC_CLEAN_RE.sub("", target))
+        pred_n = float(re.sub(_NUMERIC_CLEAN_PATTERN, "", pred))
+        target_n = float(re.sub(_NUMERIC_CLEAN_PATTERN, "", target))
         if target_n == 0:
             return 1.0 if pred_n == 0 else 0.0
         if abs(pred_n - target_n) / abs(target_n) <= 0.05:
