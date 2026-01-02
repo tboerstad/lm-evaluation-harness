@@ -1,23 +1,20 @@
 """
 GSM8K evaluation - grade school math with chain-of-thought.
 
-Responsibilities:
-- Load gsm8k dataset (test → train, stops at limit)
-- Format 8-shot prompts with reasoning examples
-- Extract numeric answers from responses
-- Compute exact_match (normalized string comparison)
+Defines:
+- samples(): generator yielding (prompt, target) pairs
+- score(): normalized string matching
+- gsm8k_llama: Task instance for registration
 """
 
 from __future__ import annotations
 
-import logging
 import re
+from collections.abc import Iterator
 
 import datasets
 
-from core import APIConfig, TaskResult, _normalize, run_task
-
-logger = logging.getLogger(__name__)
+from core import Sample, Task, _normalize
 
 GSM8K_FEWSHOT = [
     (
@@ -54,7 +51,13 @@ GSM8K_FEWSHOT = [
     ),
 ]
 
-GSM8K_STOP = [
+_GSM8K_TEMPLATE = (
+    "Given the following problem, reason and give a final answer to the problem.\n"
+    "Problem: {question}\n"
+    'Your response should end with "The final answer is [answer]" where [answer] is the response to the problem.'
+)
+
+_GSM8K_STOP = [
     "<|eot_id|>",
     "<|start_header_id|>user<|end_header_id|>",
     "Q:",
@@ -62,12 +65,7 @@ GSM8K_STOP = [
     "<|im_end|>",
 ]
 
-
-_GSM8K_TEMPLATE = (
-    "Given the following problem, reason and give a final answer to the problem.\n"
-    "Problem: {question}\n"
-    'Your response should end with "The final answer is [answer]" where [answer] is the response to the problem.'
-)
+_NUM_PATTERN = r"-?[$0-9.,]{2,}|-?[0-9]+"
 
 
 def _format_gsm8k_prompt(question: str) -> str:
@@ -75,9 +73,6 @@ def _format_gsm8k_prompt(question: str) -> str:
     parts = [_GSM8K_TEMPLATE.format(question=q) + f"\n {a}" for q, a in GSM8K_FEWSHOT]
     parts.append(_GSM8K_TEMPLATE.format(question=question))
     return "\n\n".join(parts)
-
-
-_NUM_PATTERN = r"-?[$0-9.,]{2,}|-?[0-9]+"
 
 
 def _parse_target(answer: str) -> str:
@@ -90,57 +85,39 @@ def _parse_target(answer: str) -> str:
 
 def _extract_gsm8k_answer(response: str) -> str:
     """Extract numeric answer from GSM8K response."""
-    # Check for explicit template first
     if match := re.search(rf"The final answer is ({_NUM_PATTERN})", response):
         return match.group(1)
-
-    # Fallback: Find ALL numbers and return the LAST one
     matches = re.findall(rf"({_NUM_PATTERN})", response)
     if matches:
         return matches[-1]
-
     return response
 
 
-async def eval_gsm8k(config: APIConfig, max_samples: int | None = None) -> TaskResult:
-    """
-    Evaluate GSM8K - grade school math with chain of thought.
-
-    Returns TaskResult with exact_match, num_samples, elapsed.
-    """
-    docs = []
+def samples(max_samples: int | None = None) -> Iterator[Sample]:
+    """Generate GSM8K samples: (formatted_prompt, target_answer)."""
+    count = 0
     for split in ["test", "train"]:
         ds = datasets.load_dataset("gsm8k", "main", split=split, streaming=True)
         for doc in ds:
-            docs.append(doc)
-            if max_samples and len(docs) >= max_samples:
-                break
-        if max_samples and len(docs) >= max_samples:
-            break
-    targets = [_parse_target(d["answer"]) for d in docs]
+            yield Sample(
+                prompt=_format_gsm8k_prompt(doc["question"]),
+                target=_parse_target(doc["answer"]),
+            )
+            count += 1
+            if max_samples and count >= max_samples:
+                return
 
-    responses, elapsed = await run_task(
-        "gsm8k_llama",
-        config,
-        docs,
-        lambda d: _format_gsm8k_prompt(d["question"]),
-        stop=GSM8K_STOP,
-    )
 
-    correct = sum(
-        _normalize(_extract_gsm8k_answer(r)) == _normalize(t)
-        for r, t in zip(responses, targets)
-    )
+def score(response: str, target: str) -> float:
+    """Score GSM8K response: 1.0 if normalized answer matches, else 0.0."""
+    extracted = _extract_gsm8k_answer(response)
+    return 1.0 if _normalize(extracted) == _normalize(target) else 0.0
 
-    metrics = {
-        "exact_match": correct / len(docs),
-        "relaxed_accuracy": correct / len(docs),
-    }
-    logger.info("gsm8k_llama: %s (%.2fs)", metrics, elapsed)
 
-    return {
-        "task": "gsm8k_llama",
-        "metrics": metrics,
-        "num_samples": len(docs),
-        "elapsed": round(elapsed, 2),
-    }
+# Task instance for registration
+gsm8k_llama = Task(
+    name="gsm8k_llama",
+    samples=samples,
+    score=score,
+    stop=_GSM8K_STOP,
+)

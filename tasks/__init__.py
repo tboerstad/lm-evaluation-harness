@@ -1,14 +1,14 @@
 """
 Task registry for tinyeval.
 
-Maps task names to evaluation functions:
+Maps task names to Task instances:
 - gsm8k_llama: 8-shot grade school math
 - chartqa: multimodal chart understanding
 """
 
-from tasks.chartqa import eval_chartqa
-from tasks.gsm8k import eval_gsm8k
+from tasks.chartqa import chartqa
+from tasks.gsm8k import gsm8k_llama
 
-TASKS = {"gsm8k_llama": eval_gsm8k, "chartqa": eval_chartqa}
+TASKS = {"gsm8k_llama": gsm8k_llama, "chartqa": chartqa}
 
-__all__ = ["TASKS", "eval_gsm8k", "eval_chartqa"]
+__all__ = ["TASKS", "gsm8k_llama", "chartqa"]

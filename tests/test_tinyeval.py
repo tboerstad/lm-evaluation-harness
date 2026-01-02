@@ -4,7 +4,7 @@ Test suite for tinyeval.
 Coverage:
 - Image encoding (PIL→base64, paths, URL rejection)
 - Text normalization and metrics
-- GSM8K: prompt formatting, answer extraction
+- GSM8K: prompt formatting, answer extraction, scoring
 - ChartQA: prompt formatting, relaxed matching
 - HTTP client: text and multimodal completions
 - Integration: end-to-end pipeline
@@ -19,14 +19,21 @@ from PIL import Image
 
 from core import (
     APIConfig,
+    Sample,
+    Task,
     _build_vision_message,
     _encode_image,
     _normalize,
     complete,
+    run_task,
 )
 from tasks import TASKS
-from tasks.chartqa import _format_chartqa_prompt, _relaxed_match
-from tasks.gsm8k import _extract_gsm8k_answer, _format_gsm8k_prompt
+from tasks.chartqa import _format_chartqa_prompt, _relaxed_match, score as chartqa_score
+from tasks.gsm8k import (
+    _extract_gsm8k_answer,
+    _format_gsm8k_prompt,
+    score as gsm8k_score,
+)
 from tinyeval import evaluate
 
 
@@ -120,6 +127,12 @@ class TestGSM8K:
         assert _extract_gsm8k_answer("The final answer is $1,234") == "$1,234"
         assert _extract_gsm8k_answer("Some text with 42 in it") == "42"
 
+    def test_score_function(self):
+        """GSM8K score function works correctly."""
+        assert gsm8k_score("The final answer is 42", "42") == 1.0
+        assert gsm8k_score("The final answer is 42", "43") == 0.0
+        assert gsm8k_score("Some text ending in 42", "42") == 1.0
+
 
 class TestChartQA:
     """ChartQA task functions."""
@@ -130,6 +143,12 @@ class TestChartQA:
         assert "What is the total revenue?" in prompt
         assert "FINAL ANSWER:" in prompt
         assert "<image>" in prompt
+
+    def test_score_function(self):
+        """ChartQA score function works correctly."""
+        assert chartqa_score("FINAL ANSWER: 42", "42") == 1.0
+        assert chartqa_score("FINAL ANSWER: 42", "40") == 1.0  # 5% tolerance
+        assert chartqa_score("FINAL ANSWER: 50", "40") == 0.0  # >5%
 
 
 class TestHTTPClient:
@@ -166,14 +185,58 @@ class TestHTTPClient:
         assert responses[0] == "I see a chart"
 
 
+class TestTaskAbstraction:
+    """Task dataclass and run_task function."""
+
+    def test_task_dataclass(self):
+        """Task dataclass stores name, samples generator, and score function."""
+
+        def mock_samples(n):
+            yield Sample(prompt="test", target="42")
+
+        def mock_score(response, target):
+            return 1.0 if response == target else 0.0
+
+        task = Task(name="test", samples=mock_samples, score=mock_score)
+        assert task.name == "test"
+        assert task.max_tokens == 512  # default
+        assert task.stop == []  # default
+
+    def test_run_task_with_simple_task(self):
+        """run_task evaluates a task and returns TaskResult."""
+        config = APIConfig(url="http://test.com/v1/chat/completions", model="test")
+        response = {"choices": [{"message": {"content": "42"}}]}
+
+        def mock_samples(n):
+            yield Sample(prompt="What is 6*7?", target="42")
+
+        def mock_score(response, target):
+            return 1.0 if response.strip() == target else 0.0
+
+        task = Task(name="simple_math", samples=mock_samples, score=mock_score)
+
+        with patch("core.aiohttp.ClientSession") as mock_session:
+            mock_session.return_value.__aenter__.return_value = _make_mock_session(
+                response
+            )
+            result = asyncio.run(run_task(task, config))
+
+        assert result["task"] == "simple_math"
+        assert result["metrics"]["exact_match"] == 1.0
+        assert result["num_samples"] == 1
+
+
 class TestTasks:
     """Task registry."""
 
     def test_tasks_registered(self):
-        """Both tasks are registered."""
+        """Both tasks are registered as Task instances."""
         assert "gsm8k_llama" in TASKS
         assert "chartqa" in TASKS
         assert len(TASKS) == 2
+        # Verify they are Task instances
+        assert isinstance(TASKS["gsm8k_llama"], Task)
+        assert isinstance(TASKS["chartqa"], Task)
 
 
 class TestIntegration:
@@ -181,21 +244,26 @@ class TestIntegration:
 
     def test_evaluate_gsm8k_end_to_end(self):
         """Full GSM8K evaluation pipeline with mocked API and dataset."""
-        mock_docs = [{"question": "What is 2 + 2?", "answer": "#### 4"}]
         response = {"choices": [{"message": {"content": "The final answer is 4"}}]}
 
-        with (
-            patch("tasks.gsm8k.datasets.load_dataset") as mock_ds,
-            patch("core.aiohttp.ClientSession") as mock_session,
-        ):
-            # Mock streaming dataset as iterable
-            mock_ds.return_value.__iter__ = lambda self: iter(mock_docs)
+        # Mock samples generator
+        def mock_samples(n):
+            yield Sample(prompt="What is 2 + 2?", target="4")
+
+        with patch("core.aiohttp.ClientSession") as mock_session:
             mock_session.return_value.__aenter__.return_value = _make_mock_session(
                 response
             )
-
-            config = APIConfig(url="http://test.com/v1/chat/completions", model="test")
-            result = asyncio.run(evaluate(["gsm8k_llama"], config, max_samples=1))
+            # Temporarily replace the samples function
+            original_samples = TASKS["gsm8k_llama"].samples
+            TASKS["gsm8k_llama"].samples = mock_samples
+            try:
+                config = APIConfig(
+                    url="http://test.com/v1/chat/completions", model="test"
+                )
+                result = asyncio.run(evaluate(["gsm8k_llama"], config, max_samples=1))
+            finally:
+                TASKS["gsm8k_llama"].samples = original_samples
 
         assert result["results"]["gsm8k_llama"]["metrics"]["exact_match"] == 1.0
         assert result["results"]["gsm8k_llama"]["num_samples"] == 1
