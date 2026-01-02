@@ -2,11 +2,18 @@
 Core utilities for tinyeval.
 
 Responsibilities:
+- Task: Abstract base class defining the task contract
+- CompletionService: Protocol for API completion abstraction
 - APIConfig: endpoint, model, concurrency, timeout
 - complete(): async batch chat completions (OpenAI-compatible)
 - run_task(): format prompts, time requests, return responses
 - _normalize(): text normalization for comparison
 - _encode_image(): PIL→base64; rejects remote URLs
+
+Architecture (Dependency Inversion):
+    Task implementations depend on CompletionService (abstraction)
+    DefaultCompletionService implements CompletionService (detail)
+    Tasks are injected with a CompletionService at runtime
 """
 
 from __future__ import annotations
@@ -16,10 +23,11 @@ import base64
 import logging
 import re
 import time
-from collections.abc import Callable
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any, TypedDict
+from typing import Any, Protocol, TypedDict
 
 import aiohttp
 from PIL import Image
@@ -37,6 +45,62 @@ class TaskResult(TypedDict):
     metrics: Metrics
     num_samples: int
     elapsed: float
+
+
+class CompletionService(Protocol):
+    """
+    Protocol for completion services.
+
+    Tasks depend on this abstraction rather than concrete implementations.
+    This enables dependency injection and easier testing.
+    """
+
+    async def complete(
+        self,
+        prompts: Sequence[str | tuple[str, list[Any]]],
+        max_tokens: int = 512,
+        temperature: float = 0.0,
+        stop: list[str] | None = None,
+    ) -> list[str]:
+        """Run batch of chat completions."""
+        ...
+
+
+class Task(ABC):
+    """
+    Abstract base class for evaluation tasks.
+
+    Defines the contract that all tasks must implement:
+    - name: Unique identifier for the task
+    - evaluate(): Run evaluation and return TaskResult
+
+    Tasks receive a CompletionService via dependency injection,
+    inverting the dependency from concrete API implementations.
+    """
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Unique task identifier."""
+        ...
+
+    @abstractmethod
+    async def evaluate(
+        self,
+        completion_service: CompletionService,
+        max_samples: int | None = None,
+    ) -> TaskResult:
+        """
+        Run evaluation and return results.
+
+        Args:
+            completion_service: Service for running completions
+            max_samples: Optional limit on samples to evaluate
+
+        Returns:
+            TaskResult with metrics, num_samples, and elapsed time
+        """
+        ...
 
 
 # Pre-compiled regex patterns for _normalize
@@ -186,6 +250,30 @@ def _normalize(text: str) -> str:
     text = _NORMALIZE_THOUGHT_RE.sub("", text)
     text = _NORMALIZE_END_RE.sub("", text)
     return text.lower().strip()
+
+
+class DefaultCompletionService:
+    """
+    Default implementation of CompletionService using aiohttp.
+
+    This is the concrete implementation that tasks are injected with.
+    Implements the CompletionService protocol for OpenAI-compatible APIs.
+    """
+
+    def __init__(self, config: APIConfig) -> None:
+        self._config = config
+
+    async def complete(
+        self,
+        prompts: Sequence[str | tuple[str, list[Any]]],
+        max_tokens: int = 512,
+        temperature: float = 0.0,
+        stop: list[str] | None = None,
+    ) -> list[str]:
+        """Run batch of chat completions."""
+        return await complete(
+            list(prompts), self._config, max_tokens, temperature, stop
+        )
 
 
 async def run_task(

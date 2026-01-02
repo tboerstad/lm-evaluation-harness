@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 
 import datasets
 
-from core import APIConfig, TaskResult, _normalize, run_task
+from core import CompletionService, Task, TaskResult, _normalize
 
 logger = logging.getLogger(__name__)
 
@@ -59,47 +60,69 @@ def _relaxed_match(response: str, target: str) -> float:
     return 0.0
 
 
-async def eval_chartqa(config: APIConfig, max_samples: int | None = None) -> TaskResult:
+class ChartQATask(Task):
     """
-    Evaluate ChartQA - multimodal chart understanding.
+    ChartQA evaluation task - multimodal chart understanding.
 
-    Returns TaskResult with relaxed_accuracy, num_samples, elapsed.
+    This task implements the Task protocol, receiving a CompletionService
+    via dependency injection rather than directly calling API functions.
     """
-    docs = []
-    for split in ["test", "val", "train"]:
-        ds = datasets.load_dataset("HuggingFaceM4/ChartQA", split=split, streaming=True)
-        for doc in ds:
-            docs.append(doc)
+
+    @property
+    def name(self) -> str:
+        return "chartqa"
+
+    async def evaluate(
+        self,
+        completion_service: CompletionService,
+        max_samples: int | None = None,
+    ) -> TaskResult:
+        """
+        Evaluate ChartQA - multimodal chart understanding.
+
+        Returns TaskResult with relaxed_accuracy, num_samples, elapsed.
+        """
+        docs = self._load_dataset(max_samples)
+        targets = [
+            d["label"][0] if isinstance(d["label"], list) else str(d["label"])
+            for d in docs
+        ]
+        prompts = [(_format_chartqa_prompt(d["query"]), [d["image"]]) for d in docs]
+
+        logger.info("Evaluating: %s (%d samples)", self.name, len(docs))
+        t0 = time.perf_counter()
+        responses = await completion_service.complete(prompts)
+        elapsed = time.perf_counter() - t0
+
+        correct = sum(_relaxed_match(r, t) for r, t in zip(responses, targets))
+
+        metrics = {
+            "exact_match": sum(
+                _normalize(r) == _normalize(t) for r, t in zip(responses, targets)
+            )
+            / len(docs),
+            "relaxed_accuracy": correct / len(docs),
+        }
+        logger.info("%s: %s (%.2fs)", self.name, metrics, elapsed)
+
+        return {
+            "task": self.name,
+            "metrics": metrics,
+            "num_samples": len(docs),
+            "elapsed": round(elapsed, 2),
+        }
+
+    def _load_dataset(self, max_samples: int | None) -> list[dict]:
+        """Load ChartQA dataset samples."""
+        docs = []
+        for split in ["test", "val", "train"]:
+            ds = datasets.load_dataset(
+                "HuggingFaceM4/ChartQA", split=split, streaming=True
+            )
+            for doc in ds:
+                docs.append(doc)
+                if max_samples and len(docs) >= max_samples:
+                    break
             if max_samples and len(docs) >= max_samples:
                 break
-        if max_samples and len(docs) >= max_samples:
-            break
-
-    targets = [
-        d["label"][0] if isinstance(d["label"], list) else str(d["label"]) for d in docs
-    ]
-
-    responses, elapsed = await run_task(
-        "chartqa",
-        config,
-        docs,
-        lambda d: (_format_chartqa_prompt(d["query"]), [d["image"]]),
-    )
-
-    correct = sum(_relaxed_match(r, t) for r, t in zip(responses, targets))
-
-    metrics = {
-        "exact_match": sum(
-            _normalize(r) == _normalize(t) for r, t in zip(responses, targets)
-        )
-        / len(docs),
-        "relaxed_accuracy": correct / len(docs),
-    }
-    logger.info("chartqa: %s (%.2fs)", metrics, elapsed)
-
-    return {
-        "task": "chartqa",
-        "metrics": metrics,
-        "num_samples": len(docs),
-        "elapsed": round(elapsed, 2),
-    }
+        return docs

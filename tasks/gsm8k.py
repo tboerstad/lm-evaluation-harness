@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 
 import datasets
 
-from core import APIConfig, TaskResult, _normalize, run_task
+from core import CompletionService, Task, TaskResult, _normalize
 
 logger = logging.getLogger(__name__)
 
@@ -102,45 +103,64 @@ def _extract_gsm8k_answer(response: str) -> str:
     return response
 
 
-async def eval_gsm8k(config: APIConfig, max_samples: int | None = None) -> TaskResult:
+class GSM8KTask(Task):
     """
-    Evaluate GSM8K - grade school math with chain of thought.
+    GSM8K evaluation task - grade school math with chain of thought.
 
-    Returns TaskResult with exact_match, num_samples, elapsed.
+    This task implements the Task protocol, receiving a CompletionService
+    via dependency injection rather than directly calling API functions.
     """
-    docs = []
-    for split in ["test", "train"]:
-        ds = datasets.load_dataset("gsm8k", "main", split=split, streaming=True)
-        for doc in ds:
-            docs.append(doc)
+
+    @property
+    def name(self) -> str:
+        return "gsm8k_llama"
+
+    async def evaluate(
+        self,
+        completion_service: CompletionService,
+        max_samples: int | None = None,
+    ) -> TaskResult:
+        """
+        Evaluate GSM8K - grade school math with chain of thought.
+
+        Returns TaskResult with exact_match, num_samples, elapsed.
+        """
+        docs = self._load_dataset(max_samples)
+        targets = [_parse_target(d["answer"]) for d in docs]
+        prompts = [_format_gsm8k_prompt(d["question"]) for d in docs]
+
+        logger.info("Evaluating: %s (%d samples)", self.name, len(docs))
+        t0 = time.perf_counter()
+        responses = await completion_service.complete(prompts, stop=GSM8K_STOP)
+        elapsed = time.perf_counter() - t0
+
+        correct = sum(
+            _normalize(_extract_gsm8k_answer(r)) == _normalize(t)
+            for r, t in zip(responses, targets)
+        )
+
+        metrics = {
+            "exact_match": correct / len(docs),
+            "relaxed_accuracy": correct / len(docs),
+        }
+        logger.info("%s: %s (%.2fs)", self.name, metrics, elapsed)
+
+        return {
+            "task": self.name,
+            "metrics": metrics,
+            "num_samples": len(docs),
+            "elapsed": round(elapsed, 2),
+        }
+
+    def _load_dataset(self, max_samples: int | None) -> list[dict]:
+        """Load GSM8K dataset samples."""
+        docs = []
+        for split in ["test", "train"]:
+            ds = datasets.load_dataset("gsm8k", "main", split=split, streaming=True)
+            for doc in ds:
+                docs.append(doc)
+                if max_samples and len(docs) >= max_samples:
+                    break
             if max_samples and len(docs) >= max_samples:
                 break
-        if max_samples and len(docs) >= max_samples:
-            break
-    targets = [_parse_target(d["answer"]) for d in docs]
-
-    responses, elapsed = await run_task(
-        "gsm8k_llama",
-        config,
-        docs,
-        lambda d: _format_gsm8k_prompt(d["question"]),
-        stop=GSM8K_STOP,
-    )
-
-    correct = sum(
-        _normalize(_extract_gsm8k_answer(r)) == _normalize(t)
-        for r, t in zip(responses, targets)
-    )
-
-    metrics = {
-        "exact_match": correct / len(docs),
-        "relaxed_accuracy": correct / len(docs),
-    }
-    logger.info("gsm8k_llama: %s (%.2fs)", metrics, elapsed)
-
-    return {
-        "task": "gsm8k_llama",
-        "metrics": metrics,
-        "num_samples": len(docs),
-        "elapsed": round(elapsed, 2),
-    }
+        return docs

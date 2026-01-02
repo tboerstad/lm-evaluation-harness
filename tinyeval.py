@@ -4,19 +4,22 @@ tinyeval CLI entry point.
 
 Responsibilities:
 - Parse CLI args (tasks, model, endpoint, concurrency)
-- Create APIConfig, run tasks
+- Create APIConfig and CompletionService, run tasks
 - Output JSON
 
-Architecture:
+Architecture (Dependency Inversion):
     tinyeval.py (CLI, orchestration)
          │
     ┌────┴────┐
   core.py   tasks/
   APIConfig   TASKS registry
-  complete()  gsm8k.py
-  run_task()  chartqa.py
+  DefaultCompletionService   GSM8KTask (Task ABC)
+  Task ABC   ChartQATask (Task ABC)
 
-Flow: CLI → APIConfig → evaluate() → TASKS[name]() → JSON
+Flow: CLI → APIConfig → DefaultCompletionService → Task.evaluate() → JSON
+
+Tasks depend on CompletionService (abstraction), not on concrete API implementation.
+DefaultCompletionService is injected at runtime, enabling easy testing and swapping.
 """
 
 from __future__ import annotations
@@ -25,21 +28,29 @@ import argparse
 import asyncio
 import json
 
-from core import APIConfig, TaskResult
+from core import APIConfig, DefaultCompletionService, TaskResult
 from tasks import TASKS
 
 
 async def evaluate(
     task_names: list[str], config: APIConfig, max_samples: int | None = None
 ) -> dict[str, TaskResult | float]:
-    """Run evaluations for specified tasks."""
+    """
+    Run evaluations for specified tasks.
+
+    Creates a CompletionService and injects it into each task.
+    """
     results: dict[str, TaskResult] = {}
     total_seconds = 0.0
+
+    # Create the completion service from config (dependency injection)
+    completion_service = DefaultCompletionService(config)
 
     for name in task_names:
         if name not in TASKS:
             raise ValueError(f"Unknown task: {name}. Available: {list(TASKS.keys())}")
-        result = await TASKS[name](config, max_samples)
+        task = TASKS[name]
+        result = await task.evaluate(completion_service, max_samples)
         results[name] = result
         total_seconds += result["elapsed"]
 
