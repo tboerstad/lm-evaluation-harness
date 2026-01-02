@@ -6,6 +6,7 @@ Tests the full workflow: CLI args → API call → JSON output.
 
 import asyncio
 import sys
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from unittest.mock import patch
 
@@ -14,6 +15,18 @@ import pytest
 from core import APIConfig, Sample
 from tasks import TASKS
 from tinyeval import evaluate, main
+
+
+# Reusable mock sample generators
+def _single_sample(_n: int | None) -> Iterator[Sample]:
+    """Single sample for basic tests."""
+    yield Sample(prompt="What is 2+2?", target="4")
+
+
+def _multi_sample(_n: int | None) -> Iterator[Sample]:
+    """Multiple samples for concurrency tests."""
+    for i in range(5):
+        yield Sample(prompt=f"Question {i}?", target="42")
 
 
 class MockResp:
@@ -34,8 +47,11 @@ class MockResp:
         pass
 
 
+SamplesFn = Callable[[int | None], Iterator[Sample]]
+
+
 @contextmanager
-def cli_context(args: list[str], mock_samples: dict[str, callable]):
+def cli_context(args: list[str], mock_samples: dict[str, SamplesFn]):
     """Context manager for CLI tests: manages sys.argv and TASKS state."""
     original_argv = sys.argv
     original_samples = {name: TASKS[name].samples for name in mock_samples}
@@ -51,7 +67,7 @@ def cli_context(args: list[str], mock_samples: dict[str, callable]):
             TASKS[name].samples = samples_fn
 
 
-def run_cli_with_mock(args: list[str], mock_samples: dict[str, callable], post_fn):
+def run_cli_with_mock(args: list[str], mock_samples: dict[str, SamplesFn], post_fn):
     """Run CLI with mocked API post function."""
     with cli_context(args, mock_samples):
         with patch("core.aiohttp.ClientSession") as mock_session:
@@ -64,10 +80,6 @@ class TestE2E:
 
     def test_gsm8k_evaluation(self, capsys):
         """GSM8K task produces correct JSON output."""
-
-        def mock_samples(n):
-            yield Sample(prompt="What is 2+2?", target="4")
-
         run_cli_with_mock(
             [
                 "--tasks",
@@ -77,7 +89,7 @@ class TestE2E:
                 "--max_samples",
                 "1",
             ],
-            {"gsm8k_llama": mock_samples},
+            {"gsm8k_llama": _single_sample},
             lambda url, **kwargs: MockResp("The final answer is 4"),
         )
 
@@ -94,9 +106,6 @@ class TestE2E:
             captured_payload = kwargs.get("json")
             return MockResp()
 
-        def mock_samples(n):
-            yield Sample(prompt="What is 2+2?", target="4")
-
         run_cli_with_mock(
             [
                 "--tasks",
@@ -108,7 +117,7 @@ class TestE2E:
                 "--gen_kwargs",
                 'temperature=0.7,max_tokens=100,reasoning_effort="medium"',
             ],
-            {"gsm8k_llama": mock_samples},
+            {"gsm8k_llama": _single_sample},
             mock_post,
         )
 
@@ -133,15 +142,11 @@ class TestE2E:
                 active_requests += 1
                 max_concurrent_seen = max(max_concurrent_seen, active_requests)
                 await asyncio.sleep(0.01)
-                return self
+                return await super().__aenter__()
 
             async def __aexit__(self, *args):
                 nonlocal active_requests
                 active_requests -= 1
-
-        def mock_samples(n):
-            for i in range(5):
-                yield Sample(prompt=f"Question {i}?", target="42")
 
         run_cli_with_mock(
             [
@@ -150,11 +155,13 @@ class TestE2E:
                 "--model_args",
                 'model="test-model",base_url="http://test.com/v1",num_concurrent=2',
             ],
-            {"gsm8k_llama": mock_samples},
+            {"gsm8k_llama": _multi_sample},
             lambda url, **kwargs: TrackingMockResp(),
         )
 
-        assert max_concurrent_seen <= 2, f"Expected max 2 concurrent, saw {max_concurrent_seen}"
+        assert max_concurrent_seen <= 2, (
+            f"Expected max 2 concurrent, saw {max_concurrent_seen}"
+        )
 
     def test_model_args_passed_to_config(self):
         """model_args CLI arg flows through to APIConfig and API request."""
@@ -165,9 +172,6 @@ class TestE2E:
             captured_payload = kwargs.get("json")
             return MockResp()
 
-        def mock_samples(n):
-            yield Sample(prompt="What is 2+2?", target="4")
-
         run_cli_with_mock(
             [
                 "--tasks",
@@ -177,7 +181,7 @@ class TestE2E:
                 "--model_args",
                 'model="test-model",base_url="http://test.com/v1",num_concurrent=4,max_retries=5',
             ],
-            {"gsm8k_llama": mock_samples},
+            {"gsm8k_llama": _single_sample},
             mock_post,
         )
 

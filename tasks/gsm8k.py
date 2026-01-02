@@ -62,7 +62,7 @@ _NUM_RE = re.compile(r"-?[$0-9.,]{2,}|-?[0-9]+")
 
 def _format_gsm8k_prompt(question: str) -> str:
     """Format GSM8K prompt with few-shot examples."""
-    parts = [_GSM8K_TEMPLATE.format(question=q) + f"\n {a}" for q, a in GSM8K_FEWSHOT]
+    parts = [f"{_GSM8K_TEMPLATE.format(question=q)}\n {a}" for q, a in GSM8K_FEWSHOT]
     parts.append(_GSM8K_TEMPLATE.format(question=question))
     return "\n\n".join(parts)
 
