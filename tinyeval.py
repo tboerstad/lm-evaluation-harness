@@ -63,44 +63,31 @@ def main() -> int:
     )
     parser.add_argument(
         "--model_args",
-        default="",
-        help="Model args (e.g. model=gpt-4,base_url=http://...,num_concurrent=4)",
+        required=True,
+        help="model=...,base_url=...,num_concurrent=4,max_retries=3",
     )
-    parser.add_argument("--model", default="", help="Model name (or use model_args)")
-    parser.add_argument(
-        "--base_url", default="", help="API base URL (or use model_args)"
-    )
-    parser.add_argument("--api_key", default="", help="API key")
-    parser.add_argument("--max_samples", type=int, help="Max samples per task")
-    parser.add_argument(
-        "--num_concurrent", type=int, default=8, help="Concurrent requests"
-    )
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument(
         "--gen_kwargs",
         default="",
         help="Generation kwargs (e.g. temperature=0.7,max_tokens=1024)",
     )
+    parser.add_argument("--max_samples", type=int, help="Max samples per task")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--output", help="Output JSON file")
     args = parser.parse_args()
 
-    # Parse model_args - these take precedence over individual CLI args
     model_args = _parse_kwargs(args.model_args)
 
-    # Get model and base_url from model_args or CLI args
-    model = model_args.get("model") or args.model
-    base_url = model_args.get("base_url") or args.base_url
-
-    if not model:
-        parser.error("--model or model_args model= is required")
-    if not base_url:
-        parser.error("--base_url or model_args base_url= is required")
+    if "model" not in model_args:
+        parser.error("model_args must include model=...")
+    if "base_url" not in model_args:
+        parser.error("model_args must include base_url=...")
 
     config = APIConfig(
-        url=base_url,
-        model=model,
-        api_key=model_args.get("api_key") or args.api_key,
-        num_concurrent=model_args.get("num_concurrent", args.num_concurrent),
+        url=model_args["base_url"],
+        model=model_args["model"],
+        api_key=model_args.get("api_key", ""),
+        num_concurrent=model_args.get("num_concurrent", 8),
         max_retries=model_args.get("max_retries", 3),
         seed=model_args.get("seed", args.seed),
         gen_kwargs=_parse_kwargs(args.gen_kwargs),
