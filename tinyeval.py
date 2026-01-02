@@ -54,6 +54,7 @@ def _parse_kwargs(s: str) -> dict[str, str | int | float]:
         try:
             result[key] = json.loads(value)
         except json.JSONDecodeError:
+            # Unquoted strings like model=gpt-4 aren't valid JSON
             result[key] = value
     return result
 
