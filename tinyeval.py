@@ -26,24 +26,25 @@ import asyncio
 import json
 
 from core import APIConfig
+from result_types import TaskResult
 from tasks import TASKS
 
 
 async def evaluate(
-    task_names: list[str], config: APIConfig, limit: int | None = None
-) -> dict:
+    task_names: list[str], config: APIConfig, max_samples: int | None = None
+) -> dict[str, TaskResult | float]:
     """Run evaluations for specified tasks."""
-    results = {}
-    total_time = 0.0
+    results: dict[str, TaskResult] = {}
+    total_seconds = 0.0
 
     for name in task_names:
         if name not in TASKS:
             raise ValueError(f"Unknown task: {name}. Available: {list(TASKS.keys())}")
-        result = await TASKS[name](config, limit)
+        result = await TASKS[name](config, max_samples)
         results[name] = result
-        total_time += result["time_seconds"]
+        total_seconds += result["elapsed"]
 
-    return {"results": results, "total_time_seconds": round(total_time, 2)}
+    return {"results": results, "total_seconds": round(total_seconds, 2)}
 
 
 def main() -> int:
@@ -55,7 +56,7 @@ def main() -> int:
     parser.add_argument("--model", required=True, help="Model name")
     parser.add_argument("--base_url", required=True, help="API base URL")
     parser.add_argument("--api_key", default="", help="API key")
-    parser.add_argument("--limit", type=int, help="Limit samples per task")
+    parser.add_argument("--max_samples", type=int, help="Max samples per task")
     parser.add_argument(
         "--num_concurrent", type=int, default=8, help="Concurrent requests"
     )
@@ -72,8 +73,8 @@ def main() -> int:
     )
 
     task_names = [t.strip() for t in args.tasks.split(",") if t.strip()]
-    output = asyncio.run(evaluate(task_names, config, args.limit))
-    output["config"] = {"model": args.model, "limit": args.limit}
+    output = asyncio.run(evaluate(task_names, config, args.max_samples))
+    output["config"] = {"model": args.model, "max_samples": args.max_samples}
 
     print(json.dumps(output, indent=2))
     if args.output:
