@@ -43,7 +43,11 @@ class EvalResult(TypedDict):
 
 
 def _parse_kwargs(s: str) -> dict[str, str | int | float]:
-    """Parse 'key=value,key=value' into dict."""
+    """Parse 'key=value,key=value' into dict.
+
+    Values are parsed as JSON if valid, otherwise kept as plain strings.
+    This supports both quoted strings (model="gpt-4") and unquoted (model=gpt-4).
+    """
     if not s:
         return {}
     result = {}
@@ -53,8 +57,8 @@ def _parse_kwargs(s: str) -> dict[str, str | int | float]:
         key, value = pair.split("=", 1)
         try:
             result[key] = json.loads(value)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON value for '{key}': {value}") from e
+        except json.JSONDecodeError:
+            result[key] = value
     return result
 
 
