@@ -21,6 +21,8 @@ dependencies = [
     "httpx",
     # Image handling (for multimodal tasks)
     "pillow",
+    # Configuration validation
+    "pydantic>=2.0",
 ]
 
 [project.scripts]
