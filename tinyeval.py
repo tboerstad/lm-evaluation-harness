@@ -52,9 +52,9 @@ def _parse_kwargs(s: str) -> dict[str, str | int | float]:
             raise ValueError(f"Invalid format '{pair}': expected 'key=value'")
         key, value = pair.split("=", 1)
         try:
+            # Parse numbers/bools: temperature=0.7 -> 0.7, enabled=true -> True
             result[key] = json.loads(value)
         except json.JSONDecodeError:
-            # Unquoted strings like model=gpt-4 aren't valid JSON
             result[key] = value
     return result
 
