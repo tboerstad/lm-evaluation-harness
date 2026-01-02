@@ -31,7 +31,11 @@ from tasks import TASKS
 
 def _parse_gen_kwargs(s: str) -> dict:
     """Parse 'key=value,key=value' into dict."""
-    return dict(p.split("=", 1) for p in s.split(",")) if s else {}
+    return (
+        {k: json.loads(v) for k, v in (p.split("=", 1) for p in s.split(","))}
+        if s
+        else {}
+    )
 
 
 async def evaluate(
