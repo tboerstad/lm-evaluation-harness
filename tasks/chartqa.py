@@ -1,25 +1,21 @@
 """
 ChartQA evaluation - multimodal chart understanding.
 
-Responsibilities:
-- Load ChartQA dataset (test → val → train, stops at limit)
-- Format prompts with image and query
-- Extract "FINAL ANSWER:" from responses
-- Compute exact_match + relaxed_accuracy (5% tolerance)
+Defines:
+- samples(): generator yielding ((prompt, images), target) pairs
+- score(): relaxed matching with 5% numeric tolerance
+- chartqa: Task instance for registration
 """
 
 from __future__ import annotations
 
-import logging
 import re
+from collections.abc import Iterator
 
 import datasets
 
-from core import APIConfig, TaskResult, _normalize, run_task
+from core import Sample, Task
 
-logger = logging.getLogger(__name__)
-
-# Pre-compiled regex patterns for _relaxed_match
 _FINAL_ANSWER_RE = re.compile(r"FINAL ANSWER:\s*(.+?)(?:\n|$)", re.IGNORECASE)
 _NUMERIC_CLEAN_RE = re.compile(r"[$,%]")
 
@@ -37,7 +33,6 @@ def _format_chartqa_prompt(query: str) -> str:
 
 def _relaxed_match(response: str, target: str) -> float:
     """ChartQA metric: exact match or 5% numeric tolerance."""
-    # Extract "FINAL ANSWER: X"
     if match := _FINAL_ANSWER_RE.search(response):
         pred = match.group(1).strip()
     else:
@@ -59,47 +54,31 @@ def _relaxed_match(response: str, target: str) -> float:
     return 0.0
 
 
-async def eval_chartqa(config: APIConfig, max_samples: int | None = None) -> TaskResult:
-    """
-    Evaluate ChartQA - multimodal chart understanding.
-
-    Returns TaskResult with relaxed_accuracy, num_samples, elapsed.
-    """
-    docs = []
+def samples(max_samples: int | None = None) -> Iterator[Sample]:
+    """Generate ChartQA samples: ((prompt, [image]), target)."""
+    count = 0
     for split in ["test", "val", "train"]:
         ds = datasets.load_dataset("HuggingFaceM4/ChartQA", split=split, streaming=True)
         for doc in ds:
-            docs.append(doc)
-            if max_samples and len(docs) >= max_samples:
-                break
-        if max_samples and len(docs) >= max_samples:
-            break
+            label = doc["label"]
+            target = label[0] if isinstance(label, list) else str(label)
+            yield Sample(
+                prompt=(_format_chartqa_prompt(doc["query"]), [doc["image"]]),
+                target=target,
+            )
+            count += 1
+            if max_samples and count >= max_samples:
+                return
 
-    targets = [
-        d["label"][0] if isinstance(d["label"], list) else str(d["label"]) for d in docs
-    ]
 
-    responses, elapsed = await run_task(
-        "chartqa",
-        config,
-        docs,
-        lambda d: (_format_chartqa_prompt(d["query"]), [d["image"]]),
-    )
+def score(response: str, target: str) -> float:
+    """Score ChartQA response with relaxed matching (5% numeric tolerance)."""
+    return _relaxed_match(response, target)
 
-    correct = sum(_relaxed_match(r, t) for r, t in zip(responses, targets))
 
-    metrics = {
-        "exact_match": sum(
-            _normalize(r) == _normalize(t) for r, t in zip(responses, targets)
-        )
-        / len(docs),
-        "relaxed_accuracy": correct / len(docs),
-    }
-    logger.info("chartqa: %s (%.2fs)", metrics, elapsed)
-
-    return {
-        "task": "chartqa",
-        "metrics": metrics,
-        "num_samples": len(docs),
-        "elapsed": round(elapsed, 2),
-    }
+# Task instance for registration
+chartqa = Task(
+    name="chartqa",
+    samples=samples,
+    score=score,
+)

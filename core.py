@@ -3,8 +3,9 @@ Core utilities for tinyeval.
 
 Responsibilities:
 - APIConfig: endpoint, model, concurrency, timeout
+- Sample/Task: minimal task abstraction (generator + scorer)
 - complete(): async batch chat completions (OpenAI-compatible)
-- run_task(): format prompts, time requests, return responses
+- run_task(): evaluate a Task, return TaskResult
 - _normalize(): text normalization for comparison
 - _encode_image(): PIL→base64; rejects remote URLs
 """
@@ -16,8 +17,8 @@ import base64
 import logging
 import re
 import time
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass, field
 from io import BytesIO
 from typing import Any, TypedDict
 
@@ -37,6 +38,44 @@ class TaskResult(TypedDict):
     metrics: Metrics
     num_samples: int
     elapsed: float
+
+
+@dataclass
+class Sample:
+    """A single evaluation sample: prompt + expected target."""
+
+    prompt: str | tuple[str, list]  # text or (text, images) for multimodal
+    target: str
+
+
+@dataclass
+class Task:
+    """
+    Minimal task definition: a generator of samples + a scoring function.
+
+    Examples:
+        # Text-only task
+        Task(
+            name="gsm8k",
+            samples=lambda n: (Sample(prompt, target) for prompt, target in data[:n]),
+            score=lambda response, target: 1.0 if response == target else 0.0,
+        )
+
+        # Multimodal task with custom parameters
+        Task(
+            name="chartqa",
+            samples=lambda n: (Sample((text, [img]), target) for ...),
+            score=relaxed_match,
+            stop=["END"],
+            max_tokens=256,
+        )
+    """
+
+    name: str
+    samples: Callable[[int | None], Iterator[Sample]]  # max_samples -> samples
+    score: Callable[[str, str], float]  # (response, target) -> score
+    stop: list[str] = field(default_factory=list)
+    max_tokens: int = 512
 
 
 # Pre-compiled regex patterns for _normalize
@@ -189,19 +228,38 @@ def _normalize(text: str) -> str:
 
 
 async def run_task(
-    task_name: str,
-    config: APIConfig,
-    docs: list[dict[str, Any]],
-    prompt_fn: Callable[[dict[str, Any]], str | tuple[str, list[Any]]],
-    max_tokens: int = 512,
-    stop: list[str] | None = None,
-) -> tuple[list[str], float]:
-    """Shared execution loop: Format -> Timer -> Request -> Timer."""
-    prompts = [prompt_fn(d) for d in docs]
+    task: Task, config: APIConfig, max_samples: int | None = None
+) -> TaskResult:
+    """
+    Evaluate a task: collect samples, run inference, compute scores.
 
-    logger.info("Evaluating: %s (%d samples)", task_name, len(docs))
+    Args:
+        task: Task definition with samples generator and scoring function
+        config: API configuration
+        max_samples: Optional limit on number of samples
+
+    Returns:
+        TaskResult with metrics, sample count, and elapsed time
+    """
+    samples = list(task.samples(max_samples))
+    prompts = [s.prompt for s in samples]
+
+    logger.info("Evaluating: %s (%d samples)", task.name, len(samples))
     t0 = time.perf_counter()
-    responses = await complete(prompts, config, max_tokens=max_tokens, stop=stop)
+    responses = await complete(
+        prompts, config, max_tokens=task.max_tokens, stop=task.stop or None
+    )
     elapsed = time.perf_counter() - t0
 
-    return responses, elapsed
+    # Score each response
+    scores = [task.score(r, s.target) for r, s in zip(responses, samples)]
+    accuracy = sum(scores) / len(samples) if samples else 0.0
+
+    logger.info("%s: accuracy=%.4f (%.2fs)", task.name, accuracy, elapsed)
+
+    return {
+        "task": task.name,
+        "metrics": {"exact_match": accuracy, "relaxed_accuracy": accuracy},
+        "num_samples": len(samples),
+        "elapsed": round(elapsed, 2),
+    }

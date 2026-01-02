@@ -25,7 +25,7 @@ import argparse
 import asyncio
 import json
 
-from core import APIConfig, TaskResult
+from core import APIConfig, TaskResult, run_task
 from tasks import TASKS
 
 
@@ -39,7 +39,7 @@ async def evaluate(
     for name in task_names:
         if name not in TASKS:
             raise ValueError(f"Unknown task: {name}. Available: {list(TASKS.keys())}")
-        result = await TASKS[name](config, max_samples)
+        result = await run_task(TASKS[name], config, max_samples)
         results[name] = result
         total_seconds += result["elapsed"]
 
