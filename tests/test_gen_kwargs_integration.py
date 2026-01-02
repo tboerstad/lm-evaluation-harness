@@ -12,12 +12,17 @@ from core import APIConfig, complete
 
 
 def test_gen_kwargs_types_in_request():
-    """Verify that temperature (float) and max_tokens (int) are properly typed in request."""
+    """Verify that gen_kwargs are properly typed in request payload."""
     config = APIConfig(
         url="http://test.com/v1/chat/completions",
         model="test-model",
         api_key="test-key",
-        gen_kwargs={"temperature": 0.7, "max_tokens": 100},
+        gen_kwargs={
+            "temperature": 0.7,
+            "max_tokens": 100,
+            "reasoning_effort": "medium",
+            "logit_bias": {"42": -100, "1234": 50},
+        },
     )
 
     captured_payload = None
@@ -69,6 +74,24 @@ def test_gen_kwargs_types_in_request():
     ), f"max_tokens should be int, got {type(captured_payload['max_tokens'])}"
     assert captured_payload["max_tokens"] == 100
 
+    # Verify reasoning_effort is a string
+    assert (
+        "reasoning_effort" in captured_payload
+    ), "reasoning_effort should be in payload"
+    assert isinstance(
+        captured_payload["reasoning_effort"], str
+    ), f"reasoning_effort should be str, got {type(captured_payload['reasoning_effort'])}"
+    assert captured_payload["reasoning_effort"] == "medium"
+
+    # Verify logit_bias is a dict
+    assert "logit_bias" in captured_payload, "logit_bias should be in payload"
+    assert isinstance(
+        captured_payload["logit_bias"], dict
+    ), f"logit_bias should be dict, got {type(captured_payload['logit_bias'])}"
+    assert captured_payload["logit_bias"] == {"42": -100, "1234": 50}
+
     print(f"✓ temperature type: {type(captured_payload['temperature'])}")
     print(f"✓ max_tokens type: {type(captured_payload['max_tokens'])}")
+    print(f"✓ reasoning_effort type: {type(captured_payload['reasoning_effort'])}")
+    print(f"✓ logit_bias type: {type(captured_payload['logit_bias'])}")
     print(f"✓ Full payload: {captured_payload}")
