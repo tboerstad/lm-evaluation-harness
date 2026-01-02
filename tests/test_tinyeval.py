@@ -204,7 +204,7 @@ class TestE2E:
         ), f"Expected max 2 concurrent, saw {max_concurrent_seen}"
 
     def test_model_args_passed_to_config(self):
-        """model_args CLI arg flows through to APIConfig and API request."""
+        """model_args CLI arg flows through to APIConfig and API request (lm_eval compat)."""
         captured_payload = None
 
         class MockResp:
@@ -231,18 +231,15 @@ class TestE2E:
         original_samples = TASKS["gsm8k_llama"].samples
 
         try:
+            # lm_eval compatible: model and base_url via model_args only
             sys.argv = [
                 "tinyeval",
                 "--tasks",
                 "gsm8k_llama",
-                "--model",
-                "default-model",
-                "--base_url",
-                "http://default.com/v1",
                 "--max_samples",
                 "1",
                 "--model_args",
-                'model="override-model",base_url="http://override.com/v1",num_concurrent=4,max_retries=5',
+                'model="test-model",base_url="http://test.com/v1",num_concurrent=4,max_retries=5',
             ]
             TASKS["gsm8k_llama"].samples = mock_samples
 
@@ -253,5 +250,4 @@ class TestE2E:
             sys.argv = original_argv
             TASKS["gsm8k_llama"].samples = original_samples
 
-        # model_args should override CLI args
-        assert captured_payload["model"] == "override-model"
+        assert captured_payload["model"] == "test-model"
