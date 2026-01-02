@@ -60,6 +60,9 @@ def main() -> int:
         "--num_concurrent", type=int, default=8, help="Concurrent requests"
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument(
+        "--max_tokens", type=int, default=512, help="Max tokens per response"
+    )
     parser.add_argument("--output", help="Output JSON file")
     args = parser.parse_args()
 
@@ -69,6 +72,7 @@ def main() -> int:
         api_key=args.api_key,
         num_concurrent=args.num_concurrent,
         seed=args.seed,
+        max_tokens=args.max_tokens,
     )
 
     task_names = [t.strip() for t in args.tasks.split(",") if t.strip()]

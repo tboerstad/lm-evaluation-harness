@@ -199,8 +199,12 @@ class TestTaskAbstraction:
 
         task = Task(name="test", samples=mock_samples, score=mock_score)
         assert task.name == "test"
-        assert task.max_tokens == 512  # default
         assert task.stop == []  # default
+
+    def test_api_config_max_tokens(self):
+        """APIConfig has max_tokens with default value."""
+        config = APIConfig(url="http://test.com", model="test")
+        assert config.max_tokens == 512  # default
 
     def test_run_task_with_simple_task(self):
         """run_task evaluates a task and returns TaskResult."""

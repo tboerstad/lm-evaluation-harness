@@ -61,13 +61,12 @@ class Task:
             score=lambda response, target: 1.0 if response == target else 0.0,
         )
 
-        # Multimodal task with custom parameters
+        # Multimodal task with stop sequences
         Task(
             name="chartqa",
             samples=lambda n: (Sample((text, [img]), target) for ...),
             score=relaxed_match,
             stop=["END"],
-            max_tokens=256,
         )
     """
 
@@ -75,7 +74,6 @@ class Task:
     samples: Callable[[int | None], Iterator[Sample]]  # max_samples -> samples
     score: Callable[[str, str], float]  # (response, target) -> score
     stop: list[str] = field(default_factory=list)
-    max_tokens: int = 512
 
 
 # Pre-compiled regex patterns for _normalize
@@ -95,6 +93,7 @@ class APIConfig:
     timeout: int = 300
     max_retries: int = 3
     seed: int = 1234
+    max_tokens: int = 512
 
 
 async def _request(
@@ -247,7 +246,7 @@ async def run_task(
     logger.info("Evaluating: %s (%d samples)", task.name, len(samples))
     t0 = time.perf_counter()
     responses = await complete(
-        prompts, config, max_tokens=task.max_tokens, stop=task.stop or None
+        prompts, config, max_tokens=config.max_tokens, stop=task.stop or None
     )
     elapsed = time.perf_counter() - t0
 
