@@ -57,9 +57,8 @@ def _relaxed_match(response: str, target: str) -> float:
     return 0.0
 
 
-def samples(max_samples: int | None = None) -> Iterator[Sample]:
+def samples() -> Iterator[Sample]:
     """Generate ChartQA samples: ((prompt, [image]), target)."""
-    count = 0
     for split in ["test", "val", "train"]:
         ds = datasets.load_dataset("HuggingFaceM4/ChartQA", split=split, streaming=True)
         for doc in ds:
@@ -69,9 +68,6 @@ def samples(max_samples: int | None = None) -> Iterator[Sample]:
                 prompt=(_format_chartqa_prompt(doc["query"]), [doc["image"]]),
                 target=target,
             )
-            count += 1
-            if max_samples and count >= max_samples:
-                return
 
 
 def score(response: str, target: str) -> float:
