@@ -56,22 +56,20 @@ class Task:
         # Text-only task
         Task(
             name="gsm8k",
-            samples=lambda max_samples, seed: load_samples(max_samples, seed),
+            samples=lambda max_samples: load_samples(max_samples),
             score=lambda response, target: 1.0 if response == target else 0.0,
         )
 
         # Multimodal task
         Task(
             name="chartqa",
-            samples=lambda max_samples, seed: load_chartqa(max_samples, seed),
+            samples=lambda max_samples: load_chartqa(max_samples),
             score=relaxed_match,
         )
     """
 
     name: str
-    samples: Callable[
-        [int | None, int | None], list[Sample]
-    ]  # (max_samples, seed) -> samples
+    samples: Callable[[int | None], list[Sample]]  # (max_samples) -> samples
     score: Callable[[str, str], float]  # (response, target) -> score
 
 
@@ -234,7 +232,7 @@ async def run_task(
     Returns:
         TaskResult with metrics, sample count, and elapsed time
     """
-    samples = task.samples(max_samples, config.seed)
+    samples = task.samples(max_samples)
     prompts = [s.prompt for s in samples]
 
     logger.info("Evaluating: %s (%d samples)", task.name, len(samples))

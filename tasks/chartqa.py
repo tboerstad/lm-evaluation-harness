@@ -56,57 +56,33 @@ def _relaxed_match(response: str, target: str) -> float:
     return 0.0
 
 
-def samples(max_samples: int | None = None, seed: int | None = None) -> list[Sample]:
+def samples(max_samples: int | None = None) -> list[Sample]:
     """Load ChartQA samples: ((prompt, [image]), target).
 
     Args:
         max_samples: Optional limit on number of samples to download
-        seed: Optional seed for shuffling (only when downloading full dataset)
 
     Returns:
         List of Sample objects
     """
-    # Use streaming to only download what we need
-    if max_samples is not None:
-        result: list[Sample] = []
-        remaining = max_samples
-        for split in ["test", "val", "train"]:
-            if remaining <= 0:
-                break
-            ds = datasets.load_dataset(
-                "HuggingFaceM4/ChartQA", split=split, streaming=True
-            )
-            for doc in ds.take(remaining):
-                label = doc["label"]
-                target = label[0] if isinstance(label, list) else str(label)
-                result.append(
-                    Sample(
-                        prompt=(_format_chartqa_prompt(doc["query"]), [doc["image"]]),
-                        target=target,
-                    )
+    result: list[Sample] = []
+    remaining = max_samples
+    for split in ["test", "val", "train"]:
+        if remaining is not None and remaining <= 0:
+            break
+        ds = datasets.load_dataset("HuggingFaceM4/ChartQA", split=split, streaming=True)
+        docs = ds.take(remaining) if remaining is not None else ds
+        for doc in docs:
+            label = doc["label"]
+            target = label[0] if isinstance(label, list) else str(label)
+            result.append(
+                Sample(
+                    prompt=(_format_chartqa_prompt(doc["query"]), [doc["image"]]),
+                    target=target,
                 )
-            remaining = max_samples - len(result)
-        return result
-
-    # Full dataset: download everything, optionally shuffle
-    splits = [
-        datasets.load_dataset("HuggingFaceM4/ChartQA", split=s)
-        for s in ["test", "val", "train"]
-    ]
-    ds = datasets.concatenate_datasets(splits)
-    if seed is not None:
-        ds = ds.shuffle(seed=seed)
-
-    result = []
-    for doc in ds:
-        label = doc["label"]
-        target = label[0] if isinstance(label, list) else str(label)
-        result.append(
-            Sample(
-                prompt=(_format_chartqa_prompt(doc["query"]), [doc["image"]]),
-                target=target,
             )
-        )
+        if remaining is not None:
+            remaining = max_samples - len(result)
     return result
 
 

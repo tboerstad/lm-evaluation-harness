@@ -64,9 +64,7 @@ async def evaluate(
 
 def main() -> int:
     """CLI entry point."""
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
 
     parser = argparse.ArgumentParser(description="tinyeval - Minimal LLM evaluation")
     parser.add_argument(

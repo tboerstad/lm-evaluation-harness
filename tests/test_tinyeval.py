@@ -18,16 +18,12 @@ from tinyeval import evaluate, main
 
 
 # Reusable mock sample loaders
-def _single_sample(
-    max_samples: int | None = None, seed: int | None = None
-) -> list[Sample]:
+def _single_sample(max_samples: int | None = None) -> list[Sample]:
     """Single sample for basic tests."""
     return [Sample(prompt="What is 2+2?", target="4")]
 
 
-def _multi_sample(
-    max_samples: int | None = None, seed: int | None = None
-) -> list[Sample]:
+def _multi_sample(max_samples: int | None = None) -> list[Sample]:
     """Multiple samples for concurrency tests."""
     samples = [Sample(prompt=f"Question {i}?", target="42") for i in range(5)]
     if max_samples is not None:
@@ -53,7 +49,7 @@ class MockResp:
         pass
 
 
-SamplesFn = Callable[[int | None, int | None], list[Sample]]
+SamplesFn = Callable[[int | None], list[Sample]]
 
 
 @contextmanager
