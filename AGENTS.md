@@ -29,6 +29,14 @@ ruff format .
 pytest
 ```
 
+## Environment Variables
+
+Default environment variables for API testing:
+
+- **BASE_URL**: Base URL for the API endpoint (e.g., `https://api.deepseek.com/v1`)
+- **API_KEY**: API authentication key
+- **MODEL**: Model name (e.g., `deepseek-chat`)
+
 ## Code Style
 
 - **No local imports**: Use module-level imports only. No imports inside functions or methods.
