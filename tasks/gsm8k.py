@@ -125,7 +125,6 @@ def score(response: str, target: str) -> float:
     return 1.0 if _normalize(extracted) == _normalize(target) else 0.0
 
 
-# Task instance for registration
 gsm8k_llama = Task(
     name="gsm8k_llama",
     samples=samples,

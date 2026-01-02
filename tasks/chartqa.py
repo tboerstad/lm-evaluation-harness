@@ -91,7 +91,6 @@ def score(response: str, target: str) -> float:
     return _relaxed_match(response, target)
 
 
-# Task instance for registration
 chartqa = Task(
     name="chartqa",
     samples=samples,
