@@ -18,12 +18,13 @@ import logging
 import re
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from io import BytesIO
 from typing import Any, TypedDict
 
 import httpx
 from PIL import Image
+from pydantic import BaseModel, Field, PositiveInt
 
 logger = logging.getLogger(__name__)
 
@@ -88,18 +89,35 @@ _NORMALIZE_END_RE = re.compile(r"\.$")  # Strip trailing period: "42." -> "42"
 MAX_BACKOFF = 8  # Cap exponential backoff at 8 seconds
 
 
-@dataclass
-class APIConfig:
+class APIConfig(BaseModel):
     """API configuration."""
 
     url: str
     model: str
     seed: int
     api_key: str = ""
-    num_concurrent: int = 8
-    timeout: int = 300
-    max_retries: int = 3
-    gen_kwargs: dict[str, Any] = field(default_factory=dict)
+    num_concurrent: PositiveInt = 8
+    timeout: PositiveInt = 300
+    max_retries: PositiveInt = 3
+    gen_kwargs: dict[str, Any] = Field(default_factory=dict)
+
+
+class ChatMessage(BaseModel):
+    """OpenAI-compatible chat message."""
+
+    content: str
+
+
+class ChatChoice(BaseModel):
+    """OpenAI-compatible chat choice."""
+
+    message: ChatMessage
+
+
+class ChatCompletion(BaseModel):
+    """OpenAI-compatible chat completion response."""
+
+    choices: list[ChatChoice]
 
 
 async def _request(
@@ -113,7 +131,8 @@ async def _request(
         try:
             resp = await client.post(url, json=payload)
             if resp.is_success:
-                return resp.json()["choices"][0]["message"]["content"]
+                completion = ChatCompletion.model_validate(resp.json())
+                return completion.choices[0].message.content
             logger.warning("Request failed (attempt %d): %s", attempt + 1, resp.text)
         except asyncio.CancelledError:
             raise  # Allow the program to exit immediately on Ctrl+C
