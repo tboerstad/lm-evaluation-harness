@@ -57,6 +57,9 @@ _GSM8K_TEMPLATE = (
     'Your response should end with "The final answer is [answer]" where [answer] is the response to the problem.'
 )
 
+# Matches numbers in two forms:
+# - "-?[$0-9.,]{2,}": formatted numbers like "$1,234.56" (2+ chars to avoid lone punctuation)
+# - "-?[0-9]+": simple integers like "5" (catches single digits the first pattern misses)
 _NUM_RE = re.compile(r"-?[$0-9.,]{2,}|-?[0-9]+")
 
 
@@ -75,6 +78,7 @@ def _parse_target(answer: str) -> str:
     return parts[-1].strip()
 
 
+# Extracts number from "The final answer is 42" format (prompt instructs model to use this)
 _FINAL_ANSWER_RE = re.compile(rf"The final answer is ({_NUM_RE.pattern})")
 
 

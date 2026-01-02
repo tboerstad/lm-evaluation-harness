@@ -16,7 +16,10 @@ import datasets
 
 from core import Sample, Task
 
+# Extracts answer after "FINAL ANSWER:" up to newline or end (prompt instructs model to use this)
+# Non-greedy (.+?) stops at first newline to avoid capturing extra text
 _FINAL_ANSWER_RE = re.compile(r"FINAL ANSWER:\s*(.+?)(?:\n|$)", re.IGNORECASE)
+# Strip currency/percent symbols for numeric comparison: "$1,234%" -> "1234"
 _NUMERIC_CLEAN_RE = re.compile(r"[$,%]")
 
 

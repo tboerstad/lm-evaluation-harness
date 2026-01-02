@@ -74,9 +74,15 @@ class Task:
 
 
 # Pre-compiled regex patterns for _normalize
-_NORMALIZE_CURRENCY_RE = re.compile(r"[$,]")
-_NORMALIZE_THOUGHT_RE = re.compile(r"(?s).*#### ")
-_NORMALIZE_END_RE = re.compile(r"\.$")
+_NORMALIZE_CURRENCY_RE = re.compile(
+    r"[$,]"
+)  # Strip currency symbols: "$1,234" -> "1234"
+_NORMALIZE_THOUGHT_RE = re.compile(
+    r"(?s).*#### "
+)  # Strip GSM8K chain-of-thought prefix
+# GSM8K answers are formatted as "reasoning steps #### final_answer"
+# (?s) enables DOTALL so .* matches across newlines
+_NORMALIZE_END_RE = re.compile(r"\.$")  # Strip trailing period: "42." -> "42"
 
 
 @dataclass
@@ -106,11 +112,7 @@ async def _request(
             async with semaphore, session.post(url, json=payload) as resp:
                 if resp.ok:
                     data = await resp.json()
-                    return (
-                        data.get("choices", [{}])[0]
-                        .get("message", {})
-                        .get("content", "")
-                    )
+                    return data["choices"][0]["message"]["content"]
                 logger.warning(
                     "Request failed (attempt %d): %s", attempt + 1, await resp.text()
                 )
