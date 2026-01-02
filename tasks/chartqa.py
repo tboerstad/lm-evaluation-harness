@@ -48,12 +48,9 @@ def _relaxed_match(response: str, target: str) -> float:
         target_n = float(_NUMERIC_CLEAN_RE.sub("", target))
         if target_n == 0:
             return 1.0 if pred_n == 0 else 0.0
-        if abs(pred_n - target_n) / abs(target_n) <= 0.05:
-            return 1.0
+        return 1.0 if abs(pred_n - target_n) / abs(target_n) <= 0.05 else 0.0
     except ValueError:
-        pass
-
-    return 0.0
+        return 0.0
 
 
 def samples(max_samples: int | None = None) -> list[Sample]:
@@ -86,14 +83,9 @@ def samples(max_samples: int | None = None) -> list[Sample]:
     return result
 
 
-def score(response: str, target: str) -> float:
-    """Score ChartQA response with relaxed matching (5% numeric tolerance)."""
-    return _relaxed_match(response, target)
-
-
 # Task instance for registration
 chartqa = Task(
     name="chartqa",
     samples=samples,
-    score=score,
+    score=_relaxed_match,
 )

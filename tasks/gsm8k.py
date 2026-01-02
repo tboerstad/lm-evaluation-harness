@@ -71,10 +71,7 @@ def _format_gsm8k_prompt(question: str) -> str:
 
 def _parse_target(answer: str) -> str:
     """Parse target answer from GSM8K format, handling missing #### delimiter."""
-    parts = answer.split("####")
-    if len(parts) < 2:
-        return answer.strip()
-    return parts[-1].strip()
+    return answer.split("####")[-1].strip()
 
 
 # Extracts number from "The final answer is 42" format (prompt instructs model to use this)
@@ -86,9 +83,7 @@ def _extract_gsm8k_answer(response: str) -> str:
     if match := _FINAL_ANSWER_RE.search(response):
         return match.group(1)
     matches = _NUM_RE.findall(response)
-    if matches:
-        return matches[-1]
-    return response
+    return matches[-1] if matches else response
 
 
 def samples(max_samples: int | None = None) -> list[Sample]:

@@ -104,10 +104,9 @@ def main() -> int:
 
     model_args = _parse_kwargs(args.model_args)
 
-    if "model" not in model_args:
-        parser.error("model_args must include model=...")
-    if "base_url" not in model_args:
-        parser.error("model_args must include base_url=...")
+    for key in ("model", "base_url"):
+        if key not in model_args:
+            parser.error(f"model_args must include {key}=...")
 
     config = APIConfig(
         url=model_args["base_url"],
