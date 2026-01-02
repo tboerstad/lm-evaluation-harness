@@ -38,11 +38,18 @@ class EvalResult(TypedDict):
 
 def _parse_kwargs(s: str) -> dict[str, str | int | float]:
     """Parse 'key=value,key=value' into dict."""
-    return (
-        {k: json.loads(v) for k, v in (p.split("=", 1) for p in s.split(","))}
-        if s
-        else {}
-    )
+    if not s:
+        return {}
+    result = {}
+    for pair in s.split(","):
+        if "=" not in pair:
+            raise ValueError(f"Invalid format '{pair}': expected 'key=value'")
+        key, value = pair.split("=", 1)
+        try:
+            result[key] = json.loads(value)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON value for '{key}': {value}") from e
+    return result
 
 
 async def evaluate(
@@ -95,10 +102,10 @@ def main() -> int:
     config = APIConfig(
         url=model_args["base_url"],
         model=model_args["model"],
+        seed=args.seed,
         api_key=model_args.get("api_key", ""),
         num_concurrent=model_args.get("num_concurrent", 8),
         max_retries=model_args.get("max_retries", 3),
-        seed=model_args.get("seed", args.seed),
         gen_kwargs=_parse_kwargs(args.gen_kwargs),
     )
 

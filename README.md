@@ -7,9 +7,9 @@ Tiny Eval - A minimal harness for evaluating LLMs via OpenAI-compatible APIs.
 ## Features
 
 - **API-only** - works with any OpenAI-compatible endpoint (vLLM, TGI, Ollama, etc.)
-- **Async HTTP** - concurrent requests with configurable parallelism
+- **Async** - concurrent requests with configurable parallelism
 - **Two built-in tasks** - GSM8K (text) and ChartQA (multimodal)
-- **Minimal dependencies** - just `datasets`, `aiohttp`, `pillow`
+- **Minimal** - lean codebase, few dependencies
 
 ## Installation
 
