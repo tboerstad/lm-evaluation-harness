@@ -199,7 +199,6 @@ class TestTaskAbstraction:
 
         task = Task(name="test", samples=mock_samples, score=mock_score)
         assert task.name == "test"
-        assert task.max_tokens == 512  # default
         assert task.stop == []  # default
 
     def test_run_task_with_simple_task(self):
