@@ -42,12 +42,8 @@ class EvalResult(TypedDict):
     config: ConfigInfo
 
 
-def _parse_kwargs(s: str) -> dict[str, str | int | float]:
-    """Parse 'key=value,key=value' into dict.
-
-    Values are parsed as JSON if valid, otherwise kept as plain strings.
-    This supports both quoted strings (model="gpt-4") and unquoted (model=gpt-4).
-    """
+def _parse_kwargs(s: str) -> dict[str, str]:
+    """Parse 'key=value,key=value' into dict."""
     if not s:
         return {}
     result = {}
@@ -55,10 +51,7 @@ def _parse_kwargs(s: str) -> dict[str, str | int | float]:
         if "=" not in pair:
             raise ValueError(f"Invalid format '{pair}': expected 'key=value'")
         key, value = pair.split("=", 1)
-        try:
-            result[key] = json.loads(value)
-        except json.JSONDecodeError:
-            result[key] = value
+        result[key] = value
     return result
 
 
@@ -118,8 +111,8 @@ def main() -> int:
         model=model_args["model"],
         seed=args.seed,
         api_key=model_args.get("api_key", ""),
-        num_concurrent=model_args.get("num_concurrent", 8),
-        max_retries=model_args.get("max_retries", 3),
+        num_concurrent=int(model_args.get("num_concurrent", 8)),
+        max_retries=int(model_args.get("max_retries", 3)),
         gen_kwargs=_parse_kwargs(args.gen_kwargs),
     )
 

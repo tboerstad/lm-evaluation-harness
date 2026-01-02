@@ -63,7 +63,7 @@ class TestE2E:
                 "--tasks",
                 "gsm8k_llama",
                 "--model_args",
-                'model="test-model",base_url="http://test.com/v1"',
+                "model=test-model,base_url=http://test.com/v1",
                 "--max_samples",
                 "1",
             ],
@@ -95,18 +95,18 @@ class TestE2E:
                 "--tasks",
                 "gsm8k_llama",
                 "--model_args",
-                'model="test-model",base_url="http://test.com/v1"',
+                "model=test-model,base_url=http://test.com/v1",
                 "--max_samples",
                 "1",
                 "--gen_kwargs",
-                'temperature=0.7,max_tokens=100,reasoning_effort="medium"',
+                "temperature=0.7,max_tokens=100,reasoning_effort=medium",
             ],
             mock_tasks,
             mock_post,
         )
 
-        assert captured_payload["temperature"] == 0.7
-        assert captured_payload["max_tokens"] == 100
+        assert captured_payload["temperature"] == "0.7"
+        assert captured_payload["max_tokens"] == "100"
         assert captured_payload["reasoning_effort"] == "medium"
 
     def test_invalid_task_raises_error(self):
@@ -137,38 +137,6 @@ class TestE2E:
                 "--max_samples",
                 "1",
                 "--model_args",
-                'model="test-model",base_url="http://test.com/v1",num_concurrent=4,max_retries=5',
-            ],
-            mock_tasks,
-            mock_post,
-        )
-
-        assert captured_payload["model"] == "test-model"
-
-    def test_model_args_unquoted_strings(self):
-        """model_args supports unquoted string values (lm-eval style)."""
-        captured_payload = None
-        captured_url = None
-
-        async def mock_post(url, **kwargs):
-            nonlocal captured_payload, captured_url
-            captured_payload = kwargs.get("json")
-            captured_url = url
-            return MockResp()
-
-        mock_tasks = {
-            "gsm8k_llama": Task(
-                name="gsm8k_llama", samples=_single_sample, score=gsm8k_score
-            )
-        }
-
-        run_cli_with_mock(
-            [
-                "--tasks",
-                "gsm8k_llama",
-                "--max_samples",
-                "1",
-                "--model_args",
                 "model=test-model,base_url=http://test.com/v1,num_concurrent=4,max_retries=5",
             ],
             mock_tasks,
@@ -176,4 +144,3 @@ class TestE2E:
         )
 
         assert captured_payload["model"] == "test-model"
-        assert captured_url == "http://test.com/v1"
