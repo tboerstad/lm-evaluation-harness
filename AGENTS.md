@@ -40,3 +40,4 @@ Default environment variables for API testing:
 ## Code Style
 
 - **No local imports**: Use module-level imports only. No imports inside functions or methods.
+- **High SNR comments only**: Comments should be useful for future readers who lack context. Don't add comments that only make sense in the context of our conversation (e.g., "Required - set via CLI" or "Fixed per review"). If a comment wouldn't help someone reading the code cold, don't add it.

@@ -43,11 +43,11 @@ class TaskResult(TypedDict):
 class Sample:
     """A single evaluation sample: prompt + expected target."""
 
-    prompt: str | tuple[str, list]  # text or (text, images) for multimodal
+    prompt: str | tuple[str, list[Any]]  # text or (text, images) for multimodal
     target: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class Task:
     """
     Minimal task definition: a loader of samples + a scoring function.
@@ -85,17 +85,20 @@ _NORMALIZE_THOUGHT_RE = re.compile(
 _NORMALIZE_END_RE = re.compile(r"\.$")  # Strip trailing period: "42." -> "42"
 
 
+MAX_BACKOFF = 8  # Cap exponential backoff at 8 seconds
+
+
 @dataclass
 class APIConfig:
     """API configuration."""
 
     url: str
     model: str
+    seed: int
     api_key: str = ""
     num_concurrent: int = 8
     timeout: int = 300
     max_retries: int = 3
-    seed: int = 1234
     gen_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
@@ -117,7 +120,7 @@ async def _request(
         except httpx.HTTPError as e:
             logger.warning("Request error (attempt %d): %s", attempt + 1, e)
         if attempt < max_retries - 1:
-            await asyncio.sleep(2**attempt)
+            await asyncio.sleep(min(2**attempt, MAX_BACKOFF))
     raise RuntimeError(
         f"Failed to get response from {url} after {max_retries} attempts"
     )
@@ -198,7 +201,8 @@ def _encode_image(image: Any) -> str:
         buf = BytesIO()
         image.save(buf, format="PNG")
         return base64.b64encode(buf.getvalue()).decode()
-    return ""
+
+    raise TypeError(f"Unsupported image type: {type(image).__name__}")
 
 
 def _normalize(text: str) -> str:

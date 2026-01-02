@@ -6,21 +6,22 @@ Tests the full workflow: CLI args → API call → JSON output.
 
 import asyncio
 import sys
-from collections.abc import Callable
-from contextlib import contextmanager
 from unittest.mock import patch
 
 import pytest
 
-from core import APIConfig, Sample
-from tasks import TASKS
+from core import APIConfig, Sample, Task
 from tinyeval import evaluate, main
 
 
-# Reusable mock sample loaders
 def _single_sample(max_samples: int | None = None) -> list[Sample]:
     """Single sample for basic tests."""
     return [Sample(prompt="What is 2+2?", target="4")]
+
+
+def _simple_score(response: str, target: str) -> float:
+    """Simple scoring: 1.0 if target in response, else 0.0."""
+    return 1.0 if target in response else 0.0
 
 
 class MockResp:
@@ -35,32 +36,15 @@ class MockResp:
         return {"choices": [{"message": {"content": self._content}}]}
 
 
-SamplesFn = Callable[[int | None], list[Sample]]
-
-
-@contextmanager
-def cli_context(args: list[str], mock_samples: dict[str, SamplesFn]):
-    """Context manager for CLI tests: manages sys.argv and TASKS state."""
-    original_argv = sys.argv
-    original_samples = {name: TASKS[name].samples for name in mock_samples}
-
-    try:
-        sys.argv = ["tinyeval"] + args
-        for name, samples_fn in mock_samples.items():
-            TASKS[name].samples = samples_fn
-        yield
-    finally:
-        sys.argv = original_argv
-        for name, samples_fn in original_samples.items():
-            TASKS[name].samples = samples_fn
-
-
-def run_cli_with_mock(args: list[str], mock_samples: dict[str, SamplesFn], post_fn):
-    """Run CLI with mocked API post function."""
-    with cli_context(args, mock_samples):
-        with patch("core.httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.post = post_fn
-            main()
+def run_cli_with_mock(args: list[str], mock_tasks: dict[str, Task], post_fn):
+    """Run CLI with mocked API and tasks."""
+    with (
+        patch.object(sys, "argv", ["tinyeval"] + args),
+        patch.dict("tasks.TASKS", mock_tasks, clear=True),
+        patch("core.httpx.AsyncClient") as mock_client,
+    ):
+        mock_client.return_value.__aenter__.return_value.post = post_fn
+        main()
 
 
 class TestE2E:
@@ -72,6 +56,12 @@ class TestE2E:
         async def mock_post(url, **kwargs):
             return MockResp("The final answer is 4")
 
+        mock_tasks = {
+            "gsm8k_llama": Task(
+                name="gsm8k_llama", samples=_single_sample, score=_simple_score
+            )
+        }
+
         run_cli_with_mock(
             [
                 "--tasks",
@@ -81,7 +71,7 @@ class TestE2E:
                 "--max_samples",
                 "1",
             ],
-            {"gsm8k_llama": _single_sample},
+            mock_tasks,
             mock_post,
         )
 
@@ -98,6 +88,12 @@ class TestE2E:
             captured_payload = kwargs.get("json")
             return MockResp()
 
+        mock_tasks = {
+            "gsm8k_llama": Task(
+                name="gsm8k_llama", samples=_single_sample, score=_simple_score
+            )
+        }
+
         run_cli_with_mock(
             [
                 "--tasks",
@@ -109,7 +105,7 @@ class TestE2E:
                 "--gen_kwargs",
                 'temperature=0.7,max_tokens=100,reasoning_effort="medium"',
             ],
-            {"gsm8k_llama": _single_sample},
+            mock_tasks,
             mock_post,
         )
 
@@ -119,7 +115,7 @@ class TestE2E:
 
     def test_invalid_task_raises_error(self):
         """Unknown task name raises ValueError."""
-        config = APIConfig(url="http://test.com", model="test")
+        config = APIConfig(url="http://test.com", model="test", seed=42)
         with pytest.raises(ValueError, match="Unknown task"):
             asyncio.run(evaluate(["nonexistent_task"], config))
 
@@ -132,6 +128,12 @@ class TestE2E:
             captured_payload = kwargs.get("json")
             return MockResp()
 
+        mock_tasks = {
+            "gsm8k_llama": Task(
+                name="gsm8k_llama", samples=_single_sample, score=_simple_score
+            )
+        }
+
         run_cli_with_mock(
             [
                 "--tasks",
@@ -141,7 +143,7 @@ class TestE2E:
                 "--model_args",
                 'model="test-model",base_url="http://test.com/v1",num_concurrent=4,max_retries=5',
             ],
-            {"gsm8k_llama": _single_sample},
+            mock_tasks,
             mock_post,
         )
 
