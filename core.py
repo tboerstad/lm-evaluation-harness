@@ -1,5 +1,5 @@
 """
-Core utilities for tinyeval.
+Core utilities for nano-eval.
 
 Responsibilities:
 - APIConfig: endpoint, model, concurrency, timeout

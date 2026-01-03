@@ -1,6 +1,5 @@
-#!/usr/bin/env python3
 """
-tinyeval CLI entry point.
+nano-eval CLI entry point.
 
 Responsibilities:
 - Parse CLI args (tasks, model, endpoint, concurrency)
@@ -8,7 +7,7 @@ Responsibilities:
 - Output JSON
 
 Architecture:
-    tinyeval.py (CLI, orchestration)
+    nano_eval.py (CLI, orchestration)
          │
     ┌────┴────┐
   core.py   tasks/
@@ -128,7 +127,7 @@ def main() -> int:
     """CLI entry point."""
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
 
-    parser = argparse.ArgumentParser(description="tinyeval - Minimal LLM evaluation")
+    parser = argparse.ArgumentParser(description="nano-eval - Minimal LLM evaluation")
     parser.add_argument(
         "--tasks", required=True, help=f"Comma-separated: {', '.join(TASKS.keys())}"
     )
