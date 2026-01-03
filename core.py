@@ -32,11 +32,20 @@ class Metrics(TypedDict):
     exact_match: float
 
 
+class LoggedSample(TypedDict):
+    doc_id: int
+    target: str
+    prompt: str
+    response: str
+    exact_match: float
+
+
 class TaskResult(TypedDict):
     task: str
     metrics: Metrics
     num_samples: int
     elapsed: float
+    samples: list[LoggedSample]
 
 
 @dataclass
@@ -204,6 +213,11 @@ def _normalize(text: str) -> str:
     return text.lower().strip()
 
 
+def _prompt_to_str(prompt: str | tuple[str, list]) -> str:
+    """Extract text from prompt (handles multimodal tuples)."""
+    return prompt[0] if isinstance(prompt, tuple) else prompt
+
+
 async def run_task(
     task: Task, config: APIConfig, max_samples: int | None = None
 ) -> TaskResult:
@@ -216,7 +230,7 @@ async def run_task(
         max_samples: Optional limit on number of samples
 
     Returns:
-        TaskResult with metrics, sample count, and elapsed time
+        TaskResult with metrics, sample count, elapsed time, and per-sample data
     """
     samples = task.samples(max_samples)
     prompts = [s.prompt for s in samples]
@@ -231,9 +245,20 @@ async def run_task(
 
     logger.info("%s: accuracy=%.4f (%.2fs)", task.name, accuracy, elapsed)
 
+    # Always collect per-sample data for optional JSONL export (negligible overhead)
     return {
         "task": task.name,
         "metrics": {"exact_match": accuracy},
         "num_samples": len(samples),
         "elapsed": round(elapsed, 2),
+        "samples": [
+            {
+                "doc_id": i,
+                "target": s.target,
+                "prompt": _prompt_to_str(s.prompt),
+                "response": r,
+                "exact_match": score,
+            }
+            for i, (s, r, score) in enumerate(zip(samples, responses, scores))
+        ],
     }
