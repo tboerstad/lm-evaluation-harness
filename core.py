@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import logging
 import re
 import time
@@ -42,6 +43,7 @@ class LoggedSample(TypedDict):
 
 class TaskResult(TypedDict):
     task: str
+    task_hash: str
     metrics: Metrics
     num_samples: int
     elapsed: float
@@ -218,6 +220,18 @@ def _prompt_to_str(prompt: str | tuple[str, list]) -> str:
     return prompt[0] if isinstance(prompt, tuple) else prompt
 
 
+def compute_task_hash(samples: list[Sample]) -> str:
+    """Compute SHA256 hash for all samples in a task (includes image data)."""
+    hasher = hashlib.sha256()
+    for s in samples:
+        hasher.update(_prompt_to_str(s.prompt).encode())
+        if isinstance(s.prompt, tuple):
+            for img in s.prompt[1]:
+                hasher.update(_encode_image(img).encode())
+        hasher.update(s.target.encode())
+    return hasher.hexdigest()
+
+
 async def run_task(
     task: Task, config: APIConfig, max_samples: int | None = None
 ) -> TaskResult:
@@ -233,6 +247,7 @@ async def run_task(
         TaskResult with metrics, sample count, elapsed time, and per-sample data
     """
     samples = task.samples(max_samples)
+    task_hash = compute_task_hash(samples)
     prompts = [s.prompt for s in samples]
 
     logger.info("Evaluating: %s (%d samples)", task.name, len(samples))
@@ -248,6 +263,7 @@ async def run_task(
     # Always collect per-sample data for optional JSONL export (negligible overhead)
     return {
         "task": task.name,
+        "task_hash": task_hash,
         "metrics": {"exact_match": accuracy},
         "num_samples": len(samples),
         "elapsed": round(elapsed, 2),
