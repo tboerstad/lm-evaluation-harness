@@ -145,9 +145,6 @@ def main() -> int:
     parser.add_argument("--max_samples", type=int, help="Max samples per task")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument(
-        "--output", help="Output JSON file (deprecated, use --output_path)"
-    )
-    parser.add_argument(
         "--output_path", help="Directory for results.json and sample files"
     )
     parser.add_argument(
@@ -179,9 +176,6 @@ def main() -> int:
     )
 
     print(json.dumps(output, indent=2))
-    if args.output:
-        with open(args.output, "w") as f:
-            json.dump(output, f, indent=2)
 
     return 0
 
