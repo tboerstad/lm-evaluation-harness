@@ -1,5 +1,5 @@
 """
-Task registry for tinyeval.
+Task registry for nano-eval.
 
 Maps task names to Task instances:
 - gsm8k_llama: 8-shot grade school math

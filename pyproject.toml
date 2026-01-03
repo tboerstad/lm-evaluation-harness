@@ -3,15 +3,19 @@ requires = ["setuptools>=64.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tinyeval"
+name = "nano-eval"
 version = "1.0.0"
-description = "Tiny Eval - A minimal harness for evaluating LLMs via OpenAI-compatible APIs"
+description = "Nano Eval - A minimal harness for evaluating LLMs via OpenAI-compatible APIs"
 readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Thomas Børstad", email = "tboerstad@users.noreply.github.com" }]
+keywords = ["llm", "evaluation", "benchmark", "openai", "api", "vllm", "tgi"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "License :: OSI Approved :: MIT License",
 ]
 requires-python = ">=3.10"
 dependencies = [
@@ -21,13 +25,18 @@ dependencies = [
 ]
 
 [project.scripts]
-tinyeval = "tinyeval:main"
+nano-eval = "nano_eval:main"
+
+[project.urls]
+Homepage = "https://github.com/tboerstad/lm-evaluation-harness"
+Repository = "https://github.com/tboerstad/lm-evaluation-harness"
+Issues = "https://github.com/tboerstad/lm-evaluation-harness/issues"
 
 [project.optional-dependencies]
-dev = ["pytest>=9.0.2,<10.0", "pytest-cov>=7.0.0,<8.0", "ruff>=0.14.10,<1.0", "pre-commit>=4.5.1,<5.0"]
+dev = ["pytest>=9.0.2,<10.0", "pytest-cov>=7.0.0,<8.0", "ruff>=0.14.10,<1.0", "pre-commit>=4.5.1,<5.0", "respx>=0.22.0,<1.0"]
 
 [tool.setuptools]
-py-modules = ["tinyeval", "core"]
+py-modules = ["nano_eval", "core"]
 packages = ["tasks"]
 
 [tool.ruff.lint]
@@ -36,4 +45,4 @@ ignore = ["E501"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
-known-first-party = ["tinyeval", "core", "tasks"]
+known-first-party = ["nano_eval", "core", "tasks"]

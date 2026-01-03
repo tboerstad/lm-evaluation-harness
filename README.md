@@ -1,6 +1,6 @@
-# tinyeval
+# nano-eval
 
-Tiny Eval - A minimal harness for evaluating LLMs via OpenAI-compatible APIs.
+Nano Eval - A minimal harness for evaluating LLMs via OpenAI-compatible APIs.
 
 > **Note:** This tool is designed for **comparing relative accuracy between inference frameworks** (e.g., vLLM vs TGI vs Ollama running the same model). It is not intended for absolute benchmark evaluations or leaderboard submissions. Use it to verify that different serving backends produce consistent results.
 
@@ -23,18 +23,18 @@ pip install -e .
 
 ```bash
 # Evaluate GSM8K math benchmark
-tinyeval \
+nano-eval \
     --tasks gsm8k_llama \
     --model_args model=gpt-4,base_url=http://localhost:8000/v1 \
     --max_samples 100
 
 # Evaluate ChartQA (multimodal)
-tinyeval \
+nano-eval \
     --tasks chartqa \
     --model_args model=gpt-4-vision,base_url=http://localhost:8000/v1,num_concurrent=4
 
 # Both tasks with generation kwargs
-tinyeval \
+nano-eval \
     --tasks gsm8k_llama,chartqa \
     --model_args model=llama-3,base_url=http://localhost:8000/v1 \
     --gen_kwargs temperature=0.7,max_tokens=1024 \

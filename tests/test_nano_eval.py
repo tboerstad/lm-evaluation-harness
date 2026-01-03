@@ -1,5 +1,5 @@
 """
-End-to-end tests for tinyeval CLI.
+End-to-end tests for nano-eval CLI.
 
 Tests use real datasets with mocked API responses via respx.
 Samples are loaded before mocking to avoid respx/proxy conflicts.
@@ -13,9 +13,9 @@ import respx
 from httpx import Response
 
 from core import Task
+from nano_eval import main
 from tasks.chartqa import samples as load_chartqa_samples, score as chartqa_score
 from tasks.gsm8k import samples as load_gsm8k_samples, score as gsm8k_score
-from tinyeval import main
 
 # GSM8K: 10 mock responses (7 correct, 3 wrong = 70% accuracy)
 # Target answers: 18, 3, 70000, 540, 20, 64, 260, 160, 45, 460
@@ -70,14 +70,16 @@ class TestE2E:
         )
 
         with respx.mock:
-            respx.post("http://test.com/v1").mock(side_effect=api_response)
+            respx.post("http://test.com/v1/chat/completions").mock(
+                side_effect=api_response
+            )
 
             with (
                 patch.object(
                     sys,
                     "argv",
                     [
-                        "tinyeval",
+                        "nano-eval",
                         "--tasks",
                         "gsm8k_llama",
                         "--model_args",
@@ -126,14 +128,16 @@ class TestE2E:
         task = Task(name="chartqa", samples=lambda n: real_samples, score=chartqa_score)
 
         with respx.mock:
-            respx.post("http://test.com/v1").mock(side_effect=api_response)
+            respx.post("http://test.com/v1/chat/completions").mock(
+                side_effect=api_response
+            )
 
             with (
                 patch.object(
                     sys,
                     "argv",
                     [
-                        "tinyeval",
+                        "nano-eval",
                         "--tasks",
                         "chartqa",
                         "--model_args",
