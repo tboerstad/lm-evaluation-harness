@@ -25,6 +25,7 @@ from typing import Any, TypedDict
 
 import httpx
 from PIL import Image
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -151,8 +152,9 @@ async def complete(
         headers=headers,
         trust_env=True,
     ) as client:
-        tasks = []
-        for prompt in prompts:
+        pbar = tqdm(total=len(prompts), desc="Completions", unit="req")
+
+        async def tracked_request(prompt: str | tuple[str, list]) -> str:
             if isinstance(prompt, tuple):
                 text, images = prompt
                 messages = _build_vision_message(text, images)
@@ -165,10 +167,15 @@ async def complete(
                 "seed": config.seed,
                 **config.gen_kwargs,
             }
+            result = await _request(client, config.url, payload, config.max_retries)
+            pbar.update(1)
+            return result
 
-            tasks.append(_request(client, config.url, payload, config.max_retries))
-
-        return list(await asyncio.gather(*tasks))
+        try:
+            tasks = [tracked_request(prompt) for prompt in prompts]
+            return list(await asyncio.gather(*tasks))
+        finally:
+            pbar.close()
 
 
 def _build_vision_message(text: str, images: list[Any]) -> list[dict[str, Any]]:
