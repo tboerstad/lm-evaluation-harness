@@ -7,6 +7,8 @@ Tests the full workflow: CLI args → API call → JSON output.
 import asyncio
 import json
 import sys
+from collections.abc import Awaitable, Callable
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -22,26 +24,49 @@ def _single_sample(max_samples: int | None = None) -> list[Sample]:
     return [Sample(prompt="What is 2+2?", target="4")]
 
 
-class MockResp:
-    """Mock httpx response."""
+class MockHttpResponse:
+    """Mock HTTP response for testing."""
 
     is_success = True
 
     def __init__(self, content: str = "42"):
         self._content = content
 
-    def json(self):
+    @property
+    def text(self) -> str:
+        return self._content
+
+    def json(self) -> dict[str, Any]:
         return {"choices": [{"message": {"content": self._content}}]}
+
+
+class MockHttpClient:
+    """Mock HTTP client for testing - no async context manager needed."""
+
+    def __init__(
+        self,
+        post_fn: Callable[[str, dict[str, Any]], Awaitable[MockHttpResponse]],
+    ):
+        self._post_fn = post_fn
+
+    async def post(self, url: str, payload: dict[str, Any]) -> MockHttpResponse:
+        return await self._post_fn(url, payload)
 
 
 def run_cli_with_mock(args: list[str], mock_tasks: dict[str, Task], post_fn):
     """Run CLI with mocked API and tasks."""
+
+    async def mock_post(url: str, payload: dict[str, Any]) -> MockHttpResponse:
+        return await post_fn(url, json=payload)
+
+    mock_client = MockHttpClient(mock_post)
+
     with (
         patch.object(sys, "argv", ["tinyeval"] + args),
         patch.dict("tasks.TASKS", mock_tasks, clear=True),
-        patch("core.httpx.AsyncClient") as mock_client,
+        patch("core.HttpClient") as patched_client,
     ):
-        mock_client.return_value.__aenter__.return_value.post = post_fn
+        patched_client.return_value.__aenter__.return_value = mock_client
         main()
 
 
@@ -52,7 +77,7 @@ class TestE2E:
         """GSM8K task produces correct JSON output."""
 
         async def mock_post(url, **kwargs):
-            return MockResp("The final answer is 4")
+            return MockHttpResponse("The final answer is 4")
 
         mock_tasks = {
             "gsm8k_llama": Task(
@@ -84,7 +109,7 @@ class TestE2E:
         async def mock_post(url, **kwargs):
             nonlocal captured_payload
             captured_payload = kwargs.get("json")
-            return MockResp()
+            return MockHttpResponse()
 
         mock_tasks = {
             "gsm8k_llama": Task(
@@ -124,7 +149,7 @@ class TestE2E:
         async def mock_post(url, **kwargs):
             nonlocal captured_payload
             captured_payload = kwargs.get("json")
-            return MockResp()
+            return MockHttpResponse()
 
         mock_tasks = {
             "gsm8k_llama": Task(
@@ -151,7 +176,7 @@ class TestE2E:
         """--output_path writes results.json file."""
 
         async def mock_post(url, **kwargs):
-            return MockResp("The final answer is 4")
+            return MockHttpResponse("The final answer is 4")
 
         mock_tasks = {
             "gsm8k_llama": Task(
@@ -187,7 +212,7 @@ class TestE2E:
         """--log_samples writes per-sample JSONL files."""
 
         async def mock_post(url, **kwargs):
-            return MockResp("The final answer is 4")
+            return MockHttpResponse("The final answer is 4")
 
         mock_tasks = {
             "gsm8k_llama": Task(

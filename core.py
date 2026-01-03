@@ -29,6 +29,58 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 
+class HttpClient:
+    """Wrapper around httpx.AsyncClient for easier testing."""
+
+    def __init__(
+        self,
+        headers: dict[str, str] | None = None,
+        num_concurrent: int = 8,
+        timeout: int = 300,
+    ):
+        self._client: httpx.AsyncClient | None = None
+        self._headers = headers or {}
+        self._num_concurrent = num_concurrent
+        self._timeout = timeout
+
+    async def __aenter__(self) -> HttpClient:
+        self._client = httpx.AsyncClient(
+            limits=httpx.Limits(max_connections=self._num_concurrent),
+            timeout=httpx.Timeout(self._timeout),
+            headers=self._headers,
+            trust_env=True,
+        )
+        return self
+
+    async def __aexit__(self, *args) -> None:
+        if self._client:
+            await self._client.aclose()
+
+    async def post(self, url: str, payload: dict[str, Any]) -> HttpResponse:
+        """Make POST request, return wrapped response."""
+        assert self._client is not None
+        resp = await self._client.post(url, json=payload)
+        return HttpResponse(resp)
+
+
+class HttpResponse:
+    """Wrapper around httpx.Response for easier testing."""
+
+    def __init__(self, resp: httpx.Response):
+        self._resp = resp
+
+    @property
+    def is_success(self) -> bool:
+        return self._resp.is_success
+
+    @property
+    def text(self) -> str:
+        return self._resp.text
+
+    def json(self) -> Any:
+        return self._resp.json()
+
+
 class Metrics(TypedDict):
     exact_match: float
 
@@ -102,7 +154,7 @@ class APIConfig:
 
 
 async def _request(
-    client: httpx.AsyncClient,
+    client: HttpClient,
     url: str,
     payload: dict[str, Any],
     max_retries: int,
@@ -110,7 +162,7 @@ async def _request(
     """Single request with retries. Raises RuntimeError if all retries fail."""
     for attempt in range(max_retries):
         try:
-            resp = await client.post(url, json=payload)
+            resp = await client.post(url, payload)
             if resp.is_success:
                 return resp.json()["choices"][0]["message"]["content"]
             logger.warning("Request failed (attempt %d): %s", attempt + 1, resp.text)
@@ -128,6 +180,7 @@ async def _request(
 async def complete(
     prompts: list[str | tuple[str, list]],
     config: APIConfig,
+    client: HttpClient | None = None,
 ) -> list[str]:
     """
     Run batch of chat completions.
@@ -137,6 +190,7 @@ async def complete(
             - str: text-only prompt
             - tuple[str, list]: (text, images) for multimodal
         config: API configuration (includes gen_kwargs for temperature, max_tokens, etc.)
+        client: Optional HttpClient for dependency injection (used in tests)
 
     Returns:
         List of response strings
@@ -145,12 +199,7 @@ async def complete(
     if config.api_key:
         headers["Authorization"] = f"Bearer {config.api_key}"
 
-    async with httpx.AsyncClient(
-        limits=httpx.Limits(max_connections=config.num_concurrent),
-        timeout=httpx.Timeout(config.timeout),
-        headers=headers,
-        trust_env=True,
-    ) as client:
+    async def _run(http_client: HttpClient) -> list[str]:
         tasks = []
         for prompt in prompts:
             if isinstance(prompt, tuple):
@@ -166,9 +215,19 @@ async def complete(
                 **config.gen_kwargs,
             }
 
-            tasks.append(_request(client, config.url, payload, config.max_retries))
+            tasks.append(_request(http_client, config.url, payload, config.max_retries))
 
         return list(await asyncio.gather(*tasks))
+
+    if client is not None:
+        return await _run(client)
+
+    async with HttpClient(
+        headers=headers,
+        num_concurrent=config.num_concurrent,
+        timeout=config.timeout,
+    ) as http_client:
+        return await _run(http_client)
 
 
 def _build_vision_message(text: str, images: list[Any]) -> list[dict[str, Any]]:
@@ -233,7 +292,10 @@ def compute_task_hash(samples: list[Sample]) -> str:
 
 
 async def run_task(
-    task: Task, config: APIConfig, max_samples: int | None = None
+    task: Task,
+    config: APIConfig,
+    max_samples: int | None = None,
+    client: HttpClient | None = None,
 ) -> TaskResult:
     """
     Evaluate a task: collect samples, run inference, compute scores.
@@ -242,6 +304,7 @@ async def run_task(
         task: Task definition with samples loader and scoring function
         config: API configuration (includes gen_kwargs for temperature, max_tokens, etc.)
         max_samples: Optional limit on number of samples
+        client: Optional HttpClient for dependency injection (used in tests)
 
     Returns:
         TaskResult with metrics, sample count, elapsed time, and per-sample data
@@ -252,7 +315,7 @@ async def run_task(
 
     logger.info("Evaluating: %s (%d samples)", task.name, len(samples))
     t0 = time.perf_counter()
-    responses = await complete(prompts, config)
+    responses = await complete(prompts, config, client)
     elapsed = time.perf_counter() - t0
 
     scores = [task.score(r, s.target) for r, s in zip(responses, samples)]
