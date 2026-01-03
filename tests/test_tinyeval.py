@@ -12,7 +12,7 @@ from unittest.mock import patch
 import pytest
 from PIL import Image
 
-from core import APIConfig, Sample, Task, _encode_image
+from core import APIConfig, Sample, Task, _encode_image, compute_task_hash
 from tasks.gsm8k import score as gsm8k_score
 from tinyeval import evaluate, main
 
@@ -251,3 +251,29 @@ class TestEncodeImage:
         img.im = None
         with pytest.raises(ValueError, match="Failed to encode image"):
             _encode_image(img)
+
+
+class TestHashing:
+    """Tests for task and dataset hashing."""
+
+    def test_task_hash_deterministic(self):
+        """Same samples produce the same hash."""
+        samples = [Sample(prompt="Q", target="A")]
+        assert compute_task_hash(samples) == compute_task_hash(samples)
+
+    def test_task_hash_changes_with_content(self):
+        """Different content produces different hash."""
+        s1 = [Sample(prompt="Q1", target="A")]
+        s2 = [Sample(prompt="Q2", target="A")]
+        assert compute_task_hash(s1) != compute_task_hash(s2)
+
+    def test_task_hash_includes_images(self):
+        """Image data is included in hash."""
+        img1 = Image.new("RGB", (10, 10), color="red")
+        img2 = Image.new("RGB", (10, 10), color="blue")
+        img3 = Image.new("RGB", (10, 10), color="red")
+        s1 = [Sample(prompt=("Q", [img1]), target="A")]
+        s2 = [Sample(prompt=("Q", [img2]), target="A")]
+        s3 = [Sample(prompt=("Q", [img3]), target="A")]
+        assert compute_task_hash(s1) != compute_task_hash(s2)
+        assert compute_task_hash(s1) == compute_task_hash(s3)
