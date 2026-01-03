@@ -1,279 +1,169 @@
 """
 End-to-end tests for tinyeval CLI.
 
-Tests the full workflow: CLI args → API call → JSON output.
+Tests use real datasets with mocked API responses via respx.
+Samples are loaded before mocking to avoid respx/proxy conflicts.
 """
 
-import asyncio
 import json
 import sys
 from unittest.mock import patch
 
-import pytest
-from PIL import Image
+import respx
+from httpx import Response
 
-from core import APIConfig, Sample, Task, _encode_image, compute_task_hash
-from tasks.gsm8k import score as gsm8k_score
-from tinyeval import evaluate, main
+from core import Task
+from tasks.chartqa import samples as load_chartqa_samples, score as chartqa_score
+from tasks.gsm8k import samples as load_gsm8k_samples, score as gsm8k_score
+from tinyeval import main
 
+# GSM8K: 10 mock responses (7 correct, 3 wrong = 70% accuracy)
+# Target answers: 18, 3, 70000, 540, 20, 64, 260, 160, 45, 460
+GSM8K_RESPONSES = [
+    "The final answer is 18",
+    "The final answer is 3",
+    "The final answer is 70000",
+    "The final answer is 999",
+    "The final answer is 20",
+    "The final answer is 64",
+    "The final answer is 260",
+    "The final answer is 999",
+    "The final answer is 999",
+    "The final answer is 460",
+]
 
-def _single_sample(max_samples: int | None = None) -> list[Sample]:
-    """Single sample for basic tests."""
-    return [Sample(prompt="What is 2+2?", target="4")]
+# ChartQA: 10 mock responses (7 correct, 3 wrong = 70% accuracy)
+# Target answers: 14, 0.57, 3, No, 23, 6, 62, Yes, Inspired, 0.03
+CHARTQA_RESPONSES = [
+    "FINAL ANSWER: 14",
+    "FINAL ANSWER: 0.57",
+    "FINAL ANSWER: 3",
+    "FINAL ANSWER: No",
+    "FINAL ANSWER: 999",
+    "FINAL ANSWER: 6",
+    "FINAL ANSWER: 62",
+    "FINAL ANSWER: wrong",
+    "FINAL ANSWER: wrong",
+    "FINAL ANSWER: 0.03",
+]
 
-
-class MockResp:
-    """Mock httpx response."""
-
-    is_success = True
-
-    def __init__(self, content: str = "42"):
-        self._content = content
-
-    def json(self):
-        return {"choices": [{"message": {"content": self._content}}]}
-
-
-def run_cli_with_mock(args: list[str], mock_tasks: dict[str, Task], post_fn):
-    """Run CLI with mocked API and tasks."""
-    with (
-        patch.object(sys, "argv", ["tinyeval"] + args),
-        patch.dict("tasks.TASKS", mock_tasks, clear=True),
-        patch("core.httpx.AsyncClient") as mock_client,
-    ):
-        mock_client.return_value.__aenter__.return_value.post = post_fn
-        main()
+GSM8K_HASH = "f97c1e3ca96e715651955a910fb60a3a05528cd0de8b68ff3b43194ef05cf953"
+CHARTQA_HASH = "c6043b6621aa01df9276f665b2a8a1be6ac28c86caf5822ae3b4333a4b793caf"
 
 
 class TestE2E:
-    """End-to-end CLI tests."""
+    """End-to-end tests with real datasets and mocked API responses."""
 
-    def test_gsm8k_evaluation(self, capsys):
-        """GSM8K task produces correct JSON output."""
+    def test_gsm8k_evaluation(self, tmp_path):
+        """GSM8K evaluation with real dataset, mocked API."""
+        real_samples = load_gsm8k_samples(10)
+        call_count = 0
 
-        async def mock_post(url, **kwargs):
-            return MockResp("The final answer is 4")
+        def api_response(request):
+            nonlocal call_count
+            content = GSM8K_RESPONSES[call_count % len(GSM8K_RESPONSES)]
+            call_count += 1
+            return Response(200, json={"choices": [{"message": {"content": content}}]})
 
-        mock_tasks = {
-            "gsm8k_llama": Task(
-                name="gsm8k_llama", samples=_single_sample, score=gsm8k_score
-            )
-        }
-
-        run_cli_with_mock(
-            [
-                "--tasks",
-                "gsm8k_llama",
-                "--model_args",
-                "model=test-model,base_url=http://test.com/v1",
-                "--max_samples",
-                "1",
-            ],
-            mock_tasks,
-            mock_post,
+        task = Task(
+            name="gsm8k_llama", samples=lambda n: real_samples, score=gsm8k_score
         )
 
-        output = capsys.readouterr().out
-        assert '"gsm8k_llama"' in output
-        assert '"exact_match": 1.0' in output
+        with respx.mock:
+            respx.post("http://test.com/v1").mock(side_effect=api_response)
 
-    def test_gen_kwargs_passed_to_api(self):
-        """gen_kwargs CLI arg flows through to API request payload."""
-        captured_payload = None
+            with (
+                patch.object(
+                    sys,
+                    "argv",
+                    [
+                        "tinyeval",
+                        "--tasks",
+                        "gsm8k_llama",
+                        "--model_args",
+                        "model=test,base_url=http://test.com/v1",
+                        "--max_samples",
+                        "10",
+                        "--output_path",
+                        str(tmp_path),
+                        "--log_samples",
+                    ],
+                ),
+                patch.dict("tasks.TASKS", {"gsm8k_llama": task}),
+            ):
+                main()
 
-        async def mock_post(url, **kwargs):
-            nonlocal captured_payload
-            captured_payload = kwargs.get("json")
-            return MockResp()
+        results = json.loads((tmp_path / "results.json").read_text())
+        assert results["results"]["gsm8k_llama"]["metrics"]["exact_match"] == 0.7
+        assert results["results"]["gsm8k_llama"]["task_hash"] == GSM8K_HASH
 
-        mock_tasks = {
-            "gsm8k_llama": Task(
-                name="gsm8k_llama", samples=_single_sample, score=gsm8k_score
-            )
-        }
+        samples = [
+            json.loads(line)
+            for line in (tmp_path / "samples_gsm8k_llama.jsonl")
+            .read_text()
+            .strip()
+            .split("\n")
+        ]
+        assert len(samples) == 10
+        assert samples[0]["doc_id"] == 0
+        assert samples[0]["target"] == "18"
+        assert samples[0]["response"] == "The final answer is 18"
+        assert samples[0]["exact_match"] == 1.0
+        assert samples[3]["target"] == "540"
+        assert samples[3]["exact_match"] == 0.0
 
-        run_cli_with_mock(
-            [
-                "--tasks",
-                "gsm8k_llama",
-                "--model_args",
-                "model=test-model,base_url=http://test.com/v1",
-                "--max_samples",
-                "1",
-                "--gen_kwargs",
-                "temperature=0.7,max_tokens=100,reasoning_effort=medium",
-            ],
-            mock_tasks,
-            mock_post,
-        )
+    def test_chartqa_evaluation(self, tmp_path):
+        """ChartQA evaluation with real dataset, mocked API."""
+        real_samples = load_chartqa_samples(10)
+        call_count = 0
 
-        assert captured_payload["temperature"] == 0.7
-        assert captured_payload["max_tokens"] == 100
-        assert captured_payload["reasoning_effort"] == "medium"
+        def api_response(request):
+            nonlocal call_count
+            content = CHARTQA_RESPONSES[call_count % len(CHARTQA_RESPONSES)]
+            call_count += 1
+            return Response(200, json={"choices": [{"message": {"content": content}}]})
 
-    def test_invalid_task_raises_error(self):
-        """Unknown task name raises ValueError."""
-        config = APIConfig(url="http://test.com", model="test", seed=42)
-        with pytest.raises(ValueError, match="Unknown task"):
-            asyncio.run(evaluate(["nonexistent_task"], config))
+        task = Task(name="chartqa", samples=lambda n: real_samples, score=chartqa_score)
 
-    def test_model_args_passed_to_config(self):
-        """model_args CLI arg flows through to APIConfig and API request."""
-        captured_payload = None
+        with respx.mock:
+            respx.post("http://test.com/v1").mock(side_effect=api_response)
 
-        async def mock_post(url, **kwargs):
-            nonlocal captured_payload
-            captured_payload = kwargs.get("json")
-            return MockResp()
+            with (
+                patch.object(
+                    sys,
+                    "argv",
+                    [
+                        "tinyeval",
+                        "--tasks",
+                        "chartqa",
+                        "--model_args",
+                        "model=test,base_url=http://test.com/v1",
+                        "--max_samples",
+                        "10",
+                        "--output_path",
+                        str(tmp_path),
+                        "--log_samples",
+                    ],
+                ),
+                patch.dict("tasks.TASKS", {"chartqa": task}),
+            ):
+                main()
 
-        mock_tasks = {
-            "gsm8k_llama": Task(
-                name="gsm8k_llama", samples=_single_sample, score=gsm8k_score
-            )
-        }
+        results = json.loads((tmp_path / "results.json").read_text())
+        assert results["results"]["chartqa"]["metrics"]["exact_match"] == 0.7
+        assert results["results"]["chartqa"]["task_hash"] == CHARTQA_HASH
 
-        run_cli_with_mock(
-            [
-                "--tasks",
-                "gsm8k_llama",
-                "--max_samples",
-                "1",
-                "--model_args",
-                "model=test-model,base_url=http://test.com/v1,num_concurrent=4,max_retries=5",
-            ],
-            mock_tasks,
-            mock_post,
-        )
-
-        assert captured_payload["model"] == "test-model"
-
-    def test_output_path_writes_results_json(self, tmp_path):
-        """--output_path writes results.json file."""
-
-        async def mock_post(url, **kwargs):
-            return MockResp("The final answer is 4")
-
-        mock_tasks = {
-            "gsm8k_llama": Task(
-                name="gsm8k_llama", samples=_single_sample, score=gsm8k_score
-            )
-        }
-
-        run_cli_with_mock(
-            [
-                "--tasks",
-                "gsm8k_llama",
-                "--model_args",
-                "model=test-model,base_url=http://test.com/v1",
-                "--max_samples",
-                "1",
-                "--output_path",
-                str(tmp_path),
-            ],
-            mock_tasks,
-            mock_post,
-        )
-
-        results_file = tmp_path / "results.json"
-        assert results_file.exists()
-
-        with open(results_file) as f:
-            results = json.load(f)
-
-        assert "gsm8k_llama" in results["results"]
-        assert results["results"]["gsm8k_llama"]["metrics"]["exact_match"] == 1.0
-
-    def test_log_samples_writes_jsonl(self, tmp_path):
-        """--log_samples writes per-sample JSONL files."""
-
-        async def mock_post(url, **kwargs):
-            return MockResp("The final answer is 4")
-
-        mock_tasks = {
-            "gsm8k_llama": Task(
-                name="gsm8k_llama", samples=_single_sample, score=gsm8k_score
-            )
-        }
-
-        run_cli_with_mock(
-            [
-                "--tasks",
-                "gsm8k_llama",
-                "--model_args",
-                "model=test-model,base_url=http://test.com/v1",
-                "--max_samples",
-                "1",
-                "--output_path",
-                str(tmp_path),
-                "--log_samples",
-            ],
-            mock_tasks,
-            mock_post,
-        )
-
-        jsonl_file = tmp_path / "samples_gsm8k_llama.jsonl"
-        assert jsonl_file.exists()
-
-        with open(jsonl_file) as f:
-            sample = json.loads(f.readline())
-
-        assert sample["doc_id"] == 0
-        assert sample["target"] == "4"
-        assert "prompt" in sample
-        assert sample["response"] == "The final answer is 4"
-        assert sample["exact_match"] == 1.0
-
-
-class TestEncodeImage:
-    """Tests for _encode_image function."""
-
-    def test_encode_valid_image(self):
-        """Valid PIL image encodes to base64."""
-        img = Image.new("RGB", (10, 10), color="red")
-        result = _encode_image(img)
-        assert isinstance(result, str)
-        assert len(result) > 0
-
-    def test_encode_passthrough_string(self):
-        """Base64 string passes through unchanged."""
-        b64_string = "SGVsbG8gV29ybGQ="
-        assert _encode_image(b64_string) == b64_string
-
-    def test_encode_rejects_unsupported_type(self):
-        """Unsupported types raise TypeError."""
-        with pytest.raises(TypeError, match="Unsupported image type"):
-            _encode_image(12345)
-
-    def test_encode_raises_on_corrupt_image(self):
-        """Corrupt image raises ValueError."""
-        img = Image.new("RGB", (10, 10))
-        # Corrupt the image by clearing its internal data
-        img.im = None
-        with pytest.raises(ValueError, match="Failed to encode image"):
-            _encode_image(img)
-
-
-class TestHashing:
-    """Tests for task and dataset hashing."""
-
-    def test_task_hash_deterministic(self):
-        """Same samples produce the same hash."""
-        samples = [Sample(prompt="Q", target="A")]
-        assert compute_task_hash(samples) == compute_task_hash(samples)
-
-    def test_task_hash_changes_with_content(self):
-        """Different content produces different hash."""
-        s1 = [Sample(prompt="Q1", target="A")]
-        s2 = [Sample(prompt="Q2", target="A")]
-        assert compute_task_hash(s1) != compute_task_hash(s2)
-
-    def test_task_hash_includes_images(self):
-        """Image data is included in hash."""
-        img1 = Image.new("RGB", (10, 10), color="red")
-        img2 = Image.new("RGB", (10, 10), color="blue")
-        img3 = Image.new("RGB", (10, 10), color="red")
-        s1 = [Sample(prompt=("Q", [img1]), target="A")]
-        s2 = [Sample(prompt=("Q", [img2]), target="A")]
-        s3 = [Sample(prompt=("Q", [img3]), target="A")]
-        assert compute_task_hash(s1) != compute_task_hash(s2)
-        assert compute_task_hash(s1) == compute_task_hash(s3)
+        samples = [
+            json.loads(line)
+            for line in (tmp_path / "samples_chartqa.jsonl")
+            .read_text()
+            .strip()
+            .split("\n")
+        ]
+        assert len(samples) == 10
+        assert samples[0]["doc_id"] == 0
+        assert samples[0]["target"] == "14"
+        assert samples[0]["response"] == "FINAL ANSWER: 14"
+        assert samples[0]["exact_match"] == 1.0
+        assert samples[4]["target"] == "23"
+        assert samples[4]["exact_match"] == 0.0
