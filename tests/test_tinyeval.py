@@ -22,26 +22,17 @@ def _single_sample(max_samples: int | None = None) -> list[Sample]:
     return [Sample(prompt="What is 2+2?", target="4")]
 
 
-class MockResp:
-    """Mock httpx response."""
-
-    is_success = True
-
-    def __init__(self, content: str = "42"):
-        self._content = content
-
-    def json(self):
-        return {"choices": [{"message": {"content": self._content}}]}
-
-
-def run_cli_with_mock(args: list[str], mock_tasks: dict[str, Task], post_fn):
+def run_cli_with_mock(args: list[str], mock_tasks: dict[str, Task], request_fn):
     """Run CLI with mocked API and tasks."""
+
+    async def mock_request(client, url, payload, max_retries):
+        return await request_fn(url, json=payload)
+
     with (
         patch.object(sys, "argv", ["tinyeval"] + args),
         patch.dict("tasks.TASKS", mock_tasks, clear=True),
-        patch("core.httpx.AsyncClient") as mock_client,
+        patch("core._request", side_effect=mock_request),
     ):
-        mock_client.return_value.__aenter__.return_value.post = post_fn
         main()
 
 
@@ -51,8 +42,8 @@ class TestE2E:
     def test_gsm8k_evaluation(self, capsys):
         """GSM8K task produces correct JSON output."""
 
-        async def mock_post(url, **kwargs):
-            return MockResp("The final answer is 4")
+        async def mock_request(url, **kwargs):
+            return "The final answer is 4"
 
         mock_tasks = {
             "gsm8k_llama": Task(
@@ -70,7 +61,7 @@ class TestE2E:
                 "1",
             ],
             mock_tasks,
-            mock_post,
+            mock_request,
         )
 
         output = capsys.readouterr().out
@@ -81,10 +72,10 @@ class TestE2E:
         """gen_kwargs CLI arg flows through to API request payload."""
         captured_payload = None
 
-        async def mock_post(url, **kwargs):
+        async def mock_request(url, **kwargs):
             nonlocal captured_payload
             captured_payload = kwargs.get("json")
-            return MockResp()
+            return "42"
 
         mock_tasks = {
             "gsm8k_llama": Task(
@@ -104,7 +95,7 @@ class TestE2E:
                 "temperature=0.7,max_tokens=100,reasoning_effort=medium",
             ],
             mock_tasks,
-            mock_post,
+            mock_request,
         )
 
         assert captured_payload["temperature"] == 0.7
@@ -121,10 +112,10 @@ class TestE2E:
         """model_args CLI arg flows through to APIConfig and API request."""
         captured_payload = None
 
-        async def mock_post(url, **kwargs):
+        async def mock_request(url, **kwargs):
             nonlocal captured_payload
             captured_payload = kwargs.get("json")
-            return MockResp()
+            return "42"
 
         mock_tasks = {
             "gsm8k_llama": Task(
@@ -142,7 +133,7 @@ class TestE2E:
                 "model=test-model,base_url=http://test.com/v1,num_concurrent=4,max_retries=5",
             ],
             mock_tasks,
-            mock_post,
+            mock_request,
         )
 
         assert captured_payload["model"] == "test-model"
@@ -150,8 +141,8 @@ class TestE2E:
     def test_output_path_writes_results_json(self, tmp_path):
         """--output_path writes results.json file."""
 
-        async def mock_post(url, **kwargs):
-            return MockResp("The final answer is 4")
+        async def mock_request(url, **kwargs):
+            return "The final answer is 4"
 
         mock_tasks = {
             "gsm8k_llama": Task(
@@ -171,7 +162,7 @@ class TestE2E:
                 str(tmp_path),
             ],
             mock_tasks,
-            mock_post,
+            mock_request,
         )
 
         results_file = tmp_path / "results.json"
@@ -186,8 +177,8 @@ class TestE2E:
     def test_log_samples_writes_jsonl(self, tmp_path):
         """--log_samples writes per-sample JSONL files."""
 
-        async def mock_post(url, **kwargs):
-            return MockResp("The final answer is 4")
+        async def mock_request(url, **kwargs):
+            return "The final answer is 4"
 
         mock_tasks = {
             "gsm8k_llama": Task(
@@ -208,7 +199,7 @@ class TestE2E:
                 "--log_samples",
             ],
             mock_tasks,
-            mock_post,
+            mock_request,
         )
 
         jsonl_file = tmp_path / "samples_gsm8k_llama.jsonl"
