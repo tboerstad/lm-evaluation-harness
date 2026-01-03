@@ -12,7 +12,7 @@ from unittest.mock import patch
 import pytest
 from PIL import Image
 
-from core import APIConfig, Sample, Task, _encode_image
+from core import APIConfig, Sample, Task, _encode_image, compute_task_hash
 from tasks.gsm8k import score as gsm8k_score
 from tinyeval import evaluate, main
 
@@ -251,3 +251,52 @@ class TestEncodeImage:
         img.im = None
         with pytest.raises(ValueError, match="Failed to encode image"):
             _encode_image(img)
+
+
+class TestHashing:
+    """Tests for task and dataset hashing."""
+
+    def test_task_hash_deterministic(self):
+        """Same samples produce the same hash."""
+        samples = [Sample(prompt="What is 2+2?", target="4")]
+        hash1 = compute_task_hash(samples)
+        hash2 = compute_task_hash(samples)
+        assert hash1 == hash2
+
+    def test_task_hash_differs_for_different_samples(self):
+        """Different samples produce different hashes."""
+        samples1 = [Sample(prompt="What is 2+2?", target="4")]
+        samples2 = [Sample(prompt="What is 3+3?", target="6")]
+        assert compute_task_hash(samples1) != compute_task_hash(samples2)
+
+    def test_dataset_hash_in_results(self, tmp_path):
+        """Evaluation results include dataset_hash."""
+
+        async def mock_post(url, **kwargs):
+            return MockResp("4")
+
+        mock_tasks = {
+            "test_task": Task(
+                name="test_task", samples=_single_sample, score=gsm8k_score
+            )
+        }
+
+        run_cli_with_mock(
+            [
+                "--tasks",
+                "test_task",
+                "--model_args",
+                "model=test,base_url=http://test.com/v1",
+                "--output_path",
+                str(tmp_path),
+            ],
+            mock_tasks,
+            mock_post,
+        )
+
+        with open(tmp_path / "results.json") as f:
+            results = json.load(f)
+
+        assert "dataset_hash" in results
+        assert len(results["dataset_hash"]) == 64  # SHA256 hex length
+        assert "task_hash" in results["results"]["test_task"]
