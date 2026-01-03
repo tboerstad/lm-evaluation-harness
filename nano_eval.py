@@ -101,10 +101,15 @@ async def evaluate(
         task_hashes.append(result["task_hash"])
         if output_path and log_samples:
             _write_samples_jsonl(output_path, name, result["samples"])
-        results[name] = {
-            **result,
-            "samples": [],
-        }  # Exclude samples from main JSON output
+        # Exclude samples from main JSON output
+        results[name] = TaskResult(
+            task=result["task"],
+            task_hash=result["task_hash"],
+            metrics=result["metrics"],
+            num_samples=result["num_samples"],
+            elapsed=result["elapsed"],
+            samples=[],
+        )
         total_seconds += result["elapsed"]
 
     eval_result: EvalResult = {
@@ -162,11 +167,11 @@ def main() -> int:
 
     config = APIConfig(
         url=f"{base_url}/chat/completions",
-        model=model_args["model"],
+        model=str(model_args["model"]),
         seed=args.seed,
-        api_key=model_args.get("api_key", ""),
-        num_concurrent=model_args.get("num_concurrent", 8),
-        max_retries=model_args.get("max_retries", 3),
+        api_key=str(model_args.get("api_key", "")),
+        num_concurrent=int(model_args.get("num_concurrent", 8)),
+        max_retries=int(model_args.get("max_retries", 3)),
         gen_kwargs=_parse_kwargs(args.gen_kwargs),
     )
 

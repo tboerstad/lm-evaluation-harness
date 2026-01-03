@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 
 import datasets
+from datasets import IterableDataset
 
 from core import Sample, Task, _normalize
 
@@ -106,15 +107,16 @@ def samples(max_samples: int | None = None) -> list[Sample]:
         if remaining is not None and remaining <= 0:
             break
         ds = datasets.load_dataset("gsm8k", "main", split=split, streaming=True)
-        docs = ds.take(remaining) if remaining is not None else ds
-        for doc in docs:
+        assert isinstance(ds, IterableDataset)
+        iterable = ds.take(remaining) if remaining is not None else ds
+        for doc in iterable:
             result.append(
                 Sample(
                     prompt=_format_gsm8k_prompt(doc["question"]),
                     target=_parse_target(doc["answer"]),
                 )
             )
-        if remaining is not None:
+        if max_samples is not None:
             remaining = max_samples - len(result)
     return result
 

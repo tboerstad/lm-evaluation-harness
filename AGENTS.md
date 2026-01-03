@@ -13,6 +13,7 @@ python -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]" && 
 Pre-commit hooks run automatically on `git commit`:
 
 - **ruff**: Linting and formatting (auto-fixes where possible)
+- **ty**: Type checking
 - **pytest**: Runs test suite
 
 If hooks fail:
@@ -26,6 +27,7 @@ Run checks without committing:
 ```bash
 ruff check . --fix
 ruff format .
+ty check
 pytest
 ```
 

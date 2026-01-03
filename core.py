@@ -261,20 +261,21 @@ async def run_task(
     logger.info("%s: accuracy=%.4f (%.2fs)", task.name, accuracy, elapsed)
 
     # Always collect per-sample data for optional JSONL export (negligible overhead)
-    return {
-        "task": task.name,
-        "task_hash": task_hash,
-        "metrics": {"exact_match": accuracy},
-        "num_samples": len(samples),
-        "elapsed": round(elapsed, 2),
-        "samples": [
-            {
-                "doc_id": i,
-                "target": s.target,
-                "prompt": _prompt_to_str(s.prompt),
-                "response": r,
-                "exact_match": score,
-            }
-            for i, (s, r, score) in enumerate(zip(samples, responses, scores))
-        ],
-    }
+    logged_samples: list[LoggedSample] = [
+        LoggedSample(
+            doc_id=i,
+            target=s.target,
+            prompt=_prompt_to_str(s.prompt),
+            response=r,
+            exact_match=score,
+        )
+        for i, (s, r, score) in enumerate(zip(samples, responses, scores))
+    ]
+    return TaskResult(
+        task=task.name,
+        task_hash=task_hash,
+        metrics=Metrics(exact_match=accuracy),
+        num_samples=len(samples),
+        elapsed=round(elapsed, 2),
+        samples=logged_samples,
+    )
