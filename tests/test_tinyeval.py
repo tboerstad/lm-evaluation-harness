@@ -182,8 +182,8 @@ class TestE2E:
 
         assert sample["doc_id"] == 0
         assert sample["target"] == "4"
-        assert "arguments" in sample
-        assert sample["resps"] == "The final answer is 4"
+        assert "prompt" in sample
+        assert sample["response"] == "The final answer is 4"
         assert sample["exact_match"] == 1.0
 
 

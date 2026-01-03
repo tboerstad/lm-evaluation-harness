@@ -35,8 +35,8 @@ class Metrics(TypedDict):
 class LoggedSample(TypedDict):
     doc_id: int
     target: str
-    arguments: str
-    resps: str
+    prompt: str
+    response: str
     exact_match: float
 
 
@@ -255,8 +255,8 @@ async def run_task(
             {
                 "doc_id": i,
                 "target": s.target,
-                "arguments": _prompt_to_str(s.prompt),
-                "resps": r,
+                "prompt": _prompt_to_str(s.prompt),
+                "response": r,
                 "exact_match": score,
             }
             for i, (s, r, score) in enumerate(zip(samples, responses, scores))

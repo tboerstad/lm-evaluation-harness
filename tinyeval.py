@@ -62,7 +62,7 @@ def _parse_kwargs(s: str) -> dict[str, str | int | float]:
 
 
 def _write_samples_jsonl(path: Path, task_name: str, samples: list) -> None:
-    """Write per-sample results to JSONL file (lm-evaluation-harness compatible format)."""
+    """Write per-sample results to JSONL file."""
     filepath = path / f"samples_{task_name}.jsonl"
     with open(filepath, "w") as f:
         for sample in samples:
