@@ -25,18 +25,18 @@ pip install -e .
 # Evaluate GSM8K math benchmark
 tinyeval \
     --tasks gsm8k_llama \
-    --model_args model=gpt-4,base_url=http://localhost:8000/v1/chat/completions \
+    --model_args model=gpt-4,base_url=http://localhost:8000/v1 \
     --max_samples 100
 
 # Evaluate ChartQA (multimodal)
 tinyeval \
     --tasks chartqa \
-    --model_args model=gpt-4-vision,base_url=http://localhost:8000/v1/chat/completions,num_concurrent=4
+    --model_args model=gpt-4-vision,base_url=http://localhost:8000/v1,num_concurrent=4
 
 # Both tasks with generation kwargs
 tinyeval \
     --tasks gsm8k_llama,chartqa \
-    --model_args model=llama-3,base_url=http://localhost:8000/v1/chat/completions \
+    --model_args model=llama-3,base_url=http://localhost:8000/v1 \
     --gen_kwargs temperature=0.7,max_tokens=1024 \
     --output results.json
 ```

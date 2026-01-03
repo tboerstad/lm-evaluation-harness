@@ -159,8 +159,10 @@ def main() -> int:
     if "base_url" not in model_args:
         parser.error("model_args must include base_url=...")
 
+    base_url = str(model_args["base_url"]).rstrip("/")
+
     config = APIConfig(
-        url=model_args["base_url"],
+        url=f"{base_url}/chat/completions",
         model=model_args["model"],
         seed=args.seed,
         api_key=model_args.get("api_key", ""),
