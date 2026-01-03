@@ -25,6 +25,7 @@ from typing import Any, TypedDict
 
 import httpx
 from PIL import Image
+from tqdm.asyncio import tqdm_asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +169,7 @@ async def complete(
 
             tasks.append(_request(client, config.url, payload, config.max_retries))
 
-        return list(await asyncio.gather(*tasks))
+        return list(await tqdm_asyncio.gather(*tasks, desc="Completing"))
 
 
 def _build_vision_message(text: str, images: list[Any]) -> list[dict[str, Any]]:
