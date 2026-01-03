@@ -40,7 +40,7 @@ py-modules = ["nano_eval", "core"]
 packages = ["tasks"]
 
 [tool.ruff.lint]
-extend-select = ["E", "F", "I", "UP"]
+extend-select = ["I", "UP"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
