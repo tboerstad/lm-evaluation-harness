@@ -24,11 +24,11 @@ import argparse
 import asyncio
 import hashlib
 import json
-import logging
 from pathlib import Path
 from typing import TypedDict
 
 from core import APIConfig, TaskResult, run_task
+from logging_config import setup_logging
 from tasks import TASKS
 
 
@@ -130,9 +130,14 @@ async def evaluate(
 
 def main() -> int:
     """CLI entry point."""
-    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
-
     parser = argparse.ArgumentParser(description="nano-eval - Minimal LLM evaluation")
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Increase verbosity (-v=INFO, -vv=DEBUG)",
+    )
     parser.add_argument(
         "--tasks", required=True, help=f"Comma-separated: {', '.join(TASKS.keys())}"
     )
@@ -155,6 +160,7 @@ def main() -> int:
         "--log_samples", action="store_true", help="Write per-sample JSONL files"
     )
     args = parser.parse_args()
+    setup_logging(args.verbose)
 
     model_args = _parse_kwargs(args.model_args)
 
