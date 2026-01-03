@@ -23,21 +23,21 @@ pip install -e .
 
 ```bash
 # Evaluate GSM8K math benchmark
-python tinyeval.py \
+tinyeval \
     --tasks gsm8k_llama \
-    --model_args 'model="gpt-4",base_url="http://localhost:8000/v1/chat/completions"' \
+    --model_args model=gpt-4,base_url=http://localhost:8000/v1/chat/completions \
     --max_samples 100
 
 # Evaluate ChartQA (multimodal)
-python tinyeval.py \
+tinyeval \
     --tasks chartqa \
-    --model_args 'model="gpt-4-vision",base_url="http://localhost:8000/v1/chat/completions",num_concurrent=4'
+    --model_args model=gpt-4-vision,base_url=http://localhost:8000/v1/chat/completions,num_concurrent=4
 
 # Both tasks with generation kwargs
-python tinyeval.py \
+tinyeval \
     --tasks gsm8k_llama,chartqa \
-    --model_args 'model="llama-3",base_url="http://localhost:8000/v1/chat/completions"' \
-    --gen_kwargs 'temperature=0.7,max_tokens=1024' \
+    --model_args model=llama-3,base_url=http://localhost:8000/v1/chat/completions \
+    --gen_kwargs temperature=0.7,max_tokens=1024 \
     --output results.json
 ```
 
