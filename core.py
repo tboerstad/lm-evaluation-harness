@@ -221,7 +221,17 @@ def _prompt_to_str(prompt: str | tuple[str, list]) -> str:
 async def run_task(
     task: Task, config: APIConfig, max_samples: int | None = None
 ) -> TaskResult:
-    """Evaluate a task: collect samples, run inference, compute scores."""
+    """
+    Evaluate a task: collect samples, run inference, compute scores.
+
+    Args:
+        task: Task definition with samples loader and scoring function
+        config: API configuration (includes gen_kwargs for temperature, max_tokens, etc.)
+        max_samples: Optional limit on number of samples
+
+    Returns:
+        TaskResult with metrics, sample count, elapsed time, and per-sample data
+    """
     samples = task.samples(max_samples)
     prompts = [s.prompt for s in samples]
 
@@ -235,6 +245,7 @@ async def run_task(
 
     logger.info("%s: accuracy=%.4f (%.2fs)", task.name, accuracy, elapsed)
 
+    # Always collect per-sample data for optional JSONL export (negligible overhead)
     return {
         "task": task.name,
         "metrics": {"exact_match": accuracy},

@@ -62,7 +62,7 @@ def _parse_kwargs(s: str) -> dict[str, str | int | float]:
 
 
 def _write_samples_jsonl(path: Path, task_name: str, samples: list) -> None:
-    """Write per-sample results to JSONL file."""
+    """Write per-sample results to JSONL file (lm-evaluation-harness compatible format)."""
     filepath = path / f"samples_{task_name}.jsonl"
     with open(filepath, "w") as f:
         for sample in samples:
@@ -75,7 +75,15 @@ async def evaluate(
     max_samples: int | None = None,
     output_path: Path | None = None,
 ) -> EvalResult:
-    """Run evaluations for specified tasks."""
+    """
+    Run evaluations for specified tasks.
+
+    Args:
+        task_names: List of task names to evaluate
+        config: API configuration
+        max_samples: Optional limit on samples per task
+        output_path: If provided, write per-sample JSONL files to this directory
+    """
     if output_path:
         output_path.mkdir(parents=True, exist_ok=True)
 
@@ -88,7 +96,10 @@ async def evaluate(
         result = await run_task(TASKS[name], config, max_samples)
         if output_path:
             _write_samples_jsonl(output_path, name, result["samples"])
-        results[name] = {**result, "samples": []}  # Don't include in main output
+        results[name] = {
+            **result,
+            "samples": [],
+        }  # Exclude samples from main JSON output
         total_seconds += result["elapsed"]
 
     return {
