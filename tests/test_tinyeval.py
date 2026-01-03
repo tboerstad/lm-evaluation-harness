@@ -271,6 +271,9 @@ class TestHashing:
         """Image data is included in hash."""
         img1 = Image.new("RGB", (10, 10), color="red")
         img2 = Image.new("RGB", (10, 10), color="blue")
+        img3 = Image.new("RGB", (10, 10), color="red")
         s1 = [Sample(prompt=("Q", [img1]), target="A")]
         s2 = [Sample(prompt=("Q", [img2]), target="A")]
+        s3 = [Sample(prompt=("Q", [img3]), target="A")]
         assert compute_task_hash(s1) != compute_task_hash(s2)
+        assert compute_task_hash(s1) == compute_task_hash(s3)
