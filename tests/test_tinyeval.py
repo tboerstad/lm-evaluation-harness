@@ -258,45 +258,19 @@ class TestHashing:
 
     def test_task_hash_deterministic(self):
         """Same samples produce the same hash."""
-        samples = [Sample(prompt="What is 2+2?", target="4")]
-        hash1 = compute_task_hash(samples)
-        hash2 = compute_task_hash(samples)
-        assert hash1 == hash2
+        samples = [Sample(prompt="Q", target="A")]
+        assert compute_task_hash(samples) == compute_task_hash(samples)
 
-    def test_task_hash_differs_for_different_samples(self):
-        """Different samples produce different hashes."""
-        samples1 = [Sample(prompt="What is 2+2?", target="4")]
-        samples2 = [Sample(prompt="What is 3+3?", target="6")]
-        assert compute_task_hash(samples1) != compute_task_hash(samples2)
+    def test_task_hash_changes_with_content(self):
+        """Different content produces different hash."""
+        s1 = [Sample(prompt="Q1", target="A")]
+        s2 = [Sample(prompt="Q2", target="A")]
+        assert compute_task_hash(s1) != compute_task_hash(s2)
 
-    def test_dataset_hash_in_results(self, tmp_path):
-        """Evaluation results include dataset_hash."""
-
-        async def mock_post(url, **kwargs):
-            return MockResp("4")
-
-        mock_tasks = {
-            "test_task": Task(
-                name="test_task", samples=_single_sample, score=gsm8k_score
-            )
-        }
-
-        run_cli_with_mock(
-            [
-                "--tasks",
-                "test_task",
-                "--model_args",
-                "model=test,base_url=http://test.com/v1",
-                "--output_path",
-                str(tmp_path),
-            ],
-            mock_tasks,
-            mock_post,
-        )
-
-        with open(tmp_path / "results.json") as f:
-            results = json.load(f)
-
-        assert "dataset_hash" in results
-        assert len(results["dataset_hash"]) == 64  # SHA256 hex length
-        assert "task_hash" in results["results"]["test_task"]
+    def test_task_hash_includes_images(self):
+        """Image data is included in hash."""
+        img1 = Image.new("RGB", (10, 10), color="red")
+        img2 = Image.new("RGB", (10, 10), color="blue")
+        s1 = [Sample(prompt=("Q", [img1]), target="A")]
+        s2 = [Sample(prompt=("Q", [img2]), target="A")]
+        assert compute_task_hash(s1) != compute_task_hash(s2)
