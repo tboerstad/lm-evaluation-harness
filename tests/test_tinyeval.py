@@ -5,6 +5,7 @@ Tests the full workflow: CLI args → API call → JSON output.
 """
 
 import asyncio
+import json
 import sys
 from unittest.mock import patch
 
@@ -145,6 +146,46 @@ class TestE2E:
         )
 
         assert captured_payload["model"] == "test-model"
+
+    def test_log_samples_writes_jsonl(self, tmp_path):
+        """--log_samples writes per-sample JSONL files."""
+
+        async def mock_post(url, **kwargs):
+            return MockResp("The final answer is 4")
+
+        mock_tasks = {
+            "gsm8k_llama": Task(
+                name="gsm8k_llama", samples=_single_sample, score=gsm8k_score
+            )
+        }
+
+        run_cli_with_mock(
+            [
+                "--tasks",
+                "gsm8k_llama",
+                "--model_args",
+                "model=test-model,base_url=http://test.com/v1",
+                "--max_samples",
+                "1",
+                "--log_samples",
+                "--output_path",
+                str(tmp_path),
+            ],
+            mock_tasks,
+            mock_post,
+        )
+
+        jsonl_file = tmp_path / "samples_gsm8k_llama.jsonl"
+        assert jsonl_file.exists()
+
+        with open(jsonl_file) as f:
+            sample = json.loads(f.readline())
+
+        assert sample["doc_id"] == 0
+        assert sample["target"] == "4"
+        assert "arguments" in sample
+        assert sample["resps"] == "The final answer is 4"
+        assert sample["exact_match"] == 1.0
 
 
 class TestEncodeImage:

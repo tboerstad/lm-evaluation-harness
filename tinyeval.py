@@ -25,9 +25,10 @@ import argparse
 import asyncio
 import json
 import logging
+from pathlib import Path
 from typing import TypedDict
 
-from core import APIConfig, TaskResult, run_task
+from core import APIConfig, LoggedSample, TaskResult, run_task
 from tasks import TASKS
 
 
@@ -60,17 +61,40 @@ def _parse_kwargs(s: str) -> dict[str, str | int | float]:
     return result
 
 
+def _write_samples_jsonl(
+    path: Path, task_name: str, samples: list[LoggedSample]
+) -> None:
+    """Write per-sample results to JSONL file."""
+    filepath = path / f"samples_{task_name}.jsonl"
+    with open(filepath, "w") as f:
+        for sample in samples:
+            f.write(json.dumps(sample, ensure_ascii=False) + "\n")
+
+
 async def evaluate(
-    task_names: list[str], config: APIConfig, max_samples: int | None = None
+    task_names: list[str],
+    config: APIConfig,
+    max_samples: int | None = None,
+    log_samples: bool = False,
+    output_path: Path | None = None,
 ) -> EvalResult:
     """Run evaluations for specified tasks."""
+    if log_samples and not output_path:
+        raise ValueError("--output_path required when using --log_samples")
+
+    if output_path:
+        output_path.mkdir(parents=True, exist_ok=True)
+
     results: dict[str, TaskResult] = {}
     total_seconds = 0.0
 
     for name in task_names:
         if name not in TASKS:
             raise ValueError(f"Unknown task: {name}. Available: {list(TASKS.keys())}")
-        result = await run_task(TASKS[name], config, max_samples)
+        result = await run_task(TASKS[name], config, max_samples, log_samples)
+        if log_samples and output_path and result["samples"]:
+            _write_samples_jsonl(output_path, name, result["samples"])
+            result = {**result, "samples": None}  # Don't include in main output
         results[name] = result
         total_seconds += result["elapsed"]
 
@@ -102,6 +126,10 @@ def main() -> int:
     parser.add_argument("--max_samples", type=int, help="Max samples per task")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--output", help="Output JSON file")
+    parser.add_argument(
+        "--log_samples", action="store_true", help="Save per-sample results to JSONL"
+    )
+    parser.add_argument("--output_path", help="Directory for JSONL sample files")
     args = parser.parse_args()
 
     model_args = _parse_kwargs(args.model_args)
@@ -122,7 +150,10 @@ def main() -> int:
     )
 
     task_names = [t.strip() for t in args.tasks.split(",") if t.strip()]
-    output = asyncio.run(evaluate(task_names, config, args.max_samples))
+    output_path = Path(args.output_path) if args.output_path else None
+    output = asyncio.run(
+        evaluate(task_names, config, args.max_samples, args.log_samples, output_path)
+    )
 
     print(json.dumps(output, indent=2))
     if args.output:
