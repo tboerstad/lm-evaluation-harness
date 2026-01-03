@@ -1,3 +1,10 @@
+"""
+End-to-end tests for nano-eval CLI.
+
+Tests use real datasets with mocked API responses via respx.
+Samples are loaded before mocking to avoid respx/proxy conflicts.
+"""
+
 import hashlib
 import json
 import sys
