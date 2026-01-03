@@ -29,7 +29,7 @@ import logging
 from pathlib import Path
 from typing import TypedDict
 
-from core import APIConfig, TaskResult, run_task
+from core import APIConfig, HttpClient, TaskResult, run_task
 from tasks import TASKS
 
 
@@ -77,6 +77,7 @@ async def evaluate(
     max_samples: int | None = None,
     output_path: Path | None = None,
     log_samples: bool = False,
+    client: HttpClient | None = None,
 ) -> EvalResult:
     """
     Run evaluations for specified tasks.
@@ -87,6 +88,7 @@ async def evaluate(
         max_samples: Optional limit on samples per task
         output_path: If provided, write results.json to this directory
         log_samples: If True, also write samples_{task}.jsonl files
+        client: Optional HttpClient for dependency injection (used in tests)
     """
     if output_path:
         output_path.mkdir(parents=True, exist_ok=True)
@@ -98,7 +100,7 @@ async def evaluate(
     for name in task_names:
         if name not in TASKS:
             raise ValueError(f"Unknown task: {name}. Available: {list(TASKS.keys())}")
-        result = await run_task(TASKS[name], config, max_samples)
+        result = await run_task(TASKS[name], config, max_samples, client)
         task_hashes.append(result["task_hash"])
         if output_path and log_samples:
             _write_samples_jsonl(output_path, name, result["samples"])
