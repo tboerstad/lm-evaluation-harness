@@ -74,6 +74,7 @@ async def evaluate(
     config: APIConfig,
     max_samples: int | None = None,
     output_path: Path | None = None,
+    log_samples: bool = False,
 ) -> EvalResult:
     """
     Run evaluations for specified tasks.
@@ -82,7 +83,8 @@ async def evaluate(
         task_names: List of task names to evaluate
         config: API configuration
         max_samples: Optional limit on samples per task
-        output_path: If provided, write per-sample JSONL files to this directory
+        output_path: If provided, write results.json to this directory
+        log_samples: If True, also write samples_{task}.jsonl files
     """
     if output_path:
         output_path.mkdir(parents=True, exist_ok=True)
@@ -94,7 +96,7 @@ async def evaluate(
         if name not in TASKS:
             raise ValueError(f"Unknown task: {name}. Available: {list(TASKS.keys())}")
         result = await run_task(TASKS[name], config, max_samples)
-        if output_path:
+        if output_path and log_samples:
             _write_samples_jsonl(output_path, name, result["samples"])
         results[name] = {
             **result,
@@ -102,11 +104,17 @@ async def evaluate(
         }  # Exclude samples from main JSON output
         total_seconds += result["elapsed"]
 
-    return {
+    eval_result: EvalResult = {
         "results": results,
         "total_seconds": round(total_seconds, 2),
         "config": {"model": config.model, "max_samples": max_samples},
     }
+
+    if output_path:
+        with open(output_path / "results.json", "w") as f:
+            json.dump(eval_result, f, indent=2)
+
+    return eval_result
 
 
 def main() -> int:
@@ -129,8 +137,15 @@ def main() -> int:
     )
     parser.add_argument("--max_samples", type=int, help="Max samples per task")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--output", help="Output JSON file")
-    parser.add_argument("--output_path", help="Directory for per-sample JSONL files")
+    parser.add_argument(
+        "--output", help="Output JSON file (deprecated, use --output_path)"
+    )
+    parser.add_argument(
+        "--output_path", help="Directory for results.json and sample files"
+    )
+    parser.add_argument(
+        "--log_samples", action="store_true", help="Write per-sample JSONL files"
+    )
     args = parser.parse_args()
 
     model_args = _parse_kwargs(args.model_args)
@@ -152,7 +167,9 @@ def main() -> int:
 
     task_names = [t.strip() for t in args.tasks.split(",") if t.strip()]
     output_path = Path(args.output_path) if args.output_path else None
-    output = asyncio.run(evaluate(task_names, config, args.max_samples, output_path))
+    output = asyncio.run(
+        evaluate(task_names, config, args.max_samples, output_path, args.log_samples)
+    )
 
     print(json.dumps(output, indent=2))
     if args.output:

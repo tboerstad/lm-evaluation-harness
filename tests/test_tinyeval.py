@@ -147,8 +147,8 @@ class TestE2E:
 
         assert captured_payload["model"] == "test-model"
 
-    def test_output_path_writes_jsonl(self, tmp_path):
-        """--output_path writes per-sample JSONL files."""
+    def test_output_path_writes_results_json(self, tmp_path):
+        """--output_path writes results.json file."""
 
         async def mock_post(url, **kwargs):
             return MockResp("The final answer is 4")
@@ -169,6 +169,43 @@ class TestE2E:
                 "1",
                 "--output_path",
                 str(tmp_path),
+            ],
+            mock_tasks,
+            mock_post,
+        )
+
+        results_file = tmp_path / "results.json"
+        assert results_file.exists()
+
+        with open(results_file) as f:
+            results = json.load(f)
+
+        assert "gsm8k_llama" in results["results"]
+        assert results["results"]["gsm8k_llama"]["metrics"]["exact_match"] == 1.0
+
+    def test_log_samples_writes_jsonl(self, tmp_path):
+        """--log_samples writes per-sample JSONL files."""
+
+        async def mock_post(url, **kwargs):
+            return MockResp("The final answer is 4")
+
+        mock_tasks = {
+            "gsm8k_llama": Task(
+                name="gsm8k_llama", samples=_single_sample, score=gsm8k_score
+            )
+        }
+
+        run_cli_with_mock(
+            [
+                "--tasks",
+                "gsm8k_llama",
+                "--model_args",
+                "model=test-model,base_url=http://test.com/v1",
+                "--max_samples",
+                "1",
+                "--output_path",
+                str(tmp_path),
+                "--log_samples",
             ],
             mock_tasks,
             mock_post,
