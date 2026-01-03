@@ -21,7 +21,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from io import BytesIO
-from typing import Any, TypedDict
+from typing import Any
 
 import httpx
 from PIL import Image
@@ -29,11 +29,13 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 
-class Metrics(TypedDict):
+@dataclass(frozen=True)
+class Metrics:
     exact_match: float
 
 
-class LoggedSample(TypedDict):
+@dataclass(frozen=True)
+class LoggedSample:
     doc_id: int
     target: str
     prompt: str
@@ -41,7 +43,8 @@ class LoggedSample(TypedDict):
     exact_match: float
 
 
-class TaskResult(TypedDict):
+@dataclass(frozen=True)
+class TaskResult:
     task: str
     task_hash: str
     metrics: Metrics
@@ -261,20 +264,20 @@ async def run_task(
     logger.info("%s: accuracy=%.4f (%.2fs)", task.name, accuracy, elapsed)
 
     # Always collect per-sample data for optional JSONL export (negligible overhead)
-    return {
-        "task": task.name,
-        "task_hash": task_hash,
-        "metrics": {"exact_match": accuracy},
-        "num_samples": len(samples),
-        "elapsed": round(elapsed, 2),
-        "samples": [
-            {
-                "doc_id": i,
-                "target": s.target,
-                "prompt": _prompt_to_str(s.prompt),
-                "response": r,
-                "exact_match": score,
-            }
+    return TaskResult(
+        task=task.name,
+        task_hash=task_hash,
+        metrics=Metrics(exact_match=accuracy),
+        num_samples=len(samples),
+        elapsed=round(elapsed, 2),
+        samples=[
+            LoggedSample(
+                doc_id=i,
+                target=s.target,
+                prompt=_prompt_to_str(s.prompt),
+                response=r,
+                exact_match=score,
+            )
             for i, (s, r, score) in enumerate(zip(samples, responses, scores))
         ],
-    }
+    )

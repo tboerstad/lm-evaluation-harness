@@ -26,20 +26,22 @@ import asyncio
 import hashlib
 import json
 import logging
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import TypedDict
 
 from core import APIConfig, TaskResult, run_task
 from tasks import TASKS
 
 
-class ConfigInfo(TypedDict):
+@dataclass(frozen=True)
+class ConfigInfo:
     model: str
     max_samples: int | None
 
 
-class EvalResult(TypedDict):
-    results: dict[str, TaskResult]
+@dataclass(frozen=True)
+class EvalResult:
+    results: list[TaskResult]
     dataset_hash: str
     total_seconds: float
     config: ConfigInfo
@@ -68,7 +70,17 @@ def _write_samples_jsonl(path: Path, task_name: str, samples: list) -> None:
     filepath = path / f"samples_{task_name}.jsonl"
     with open(filepath, "w") as f:
         for sample in samples:
-            f.write(json.dumps(sample, ensure_ascii=False) + "\n")
+            f.write(json.dumps(asdict(sample), ensure_ascii=False) + "\n")
+
+
+def _eval_result_to_dict(result: EvalResult) -> dict:
+    """Convert EvalResult to JSON-serializable dict with task names as keys."""
+    return {
+        "results": {r.task: {**asdict(r), "samples": []} for r in result.results},
+        "dataset_hash": result.dataset_hash,
+        "total_seconds": result.total_seconds,
+        "config": asdict(result.config),
+    }
 
 
 async def evaluate(
@@ -91,7 +103,7 @@ async def evaluate(
     if output_path:
         output_path.mkdir(parents=True, exist_ok=True)
 
-    results: dict[str, TaskResult] = {}
+    results: list[TaskResult] = []
     task_hashes: list[str] = []
     total_seconds = 0.0
 
@@ -99,27 +111,22 @@ async def evaluate(
         if name not in TASKS:
             raise ValueError(f"Unknown task: {name}. Available: {list(TASKS.keys())}")
         result = await run_task(TASKS[name], config, max_samples)
-        task_hashes.append(result["task_hash"])
+        task_hashes.append(result.task_hash)
         if output_path and log_samples:
-            _write_samples_jsonl(output_path, name, result["samples"])
-        results[name] = {
-            **result,
-            "samples": [],
-        }  # Exclude samples from main JSON output
-        total_seconds += result["elapsed"]
+            _write_samples_jsonl(output_path, name, result.samples)
+        results.append(result)
+        total_seconds += result.elapsed
 
-    eval_result: EvalResult = {
-        "results": results,
-        "dataset_hash": hashlib.sha256(
-            "".join(sorted(task_hashes)).encode()
-        ).hexdigest(),
-        "total_seconds": round(total_seconds, 2),
-        "config": {"model": config.model, "max_samples": max_samples},
-    }
+    eval_result = EvalResult(
+        results=results,
+        dataset_hash=hashlib.sha256("".join(sorted(task_hashes)).encode()).hexdigest(),
+        total_seconds=round(total_seconds, 2),
+        config=ConfigInfo(model=config.model, max_samples=max_samples),
+    )
 
     if output_path:
         with open(output_path / "results.json", "w") as f:
-            json.dump(eval_result, f, indent=2)
+            json.dump(_eval_result_to_dict(eval_result), f, indent=2)
 
     return eval_result
 
@@ -174,14 +181,15 @@ def main() -> int:
 
     task_names = [t.strip() for t in args.tasks.split(",") if t.strip()]
     output_path = Path(args.output_path) if args.output_path else None
-    output = asyncio.run(
+    result = asyncio.run(
         evaluate(task_names, config, args.max_samples, output_path, args.log_samples)
     )
 
-    print(json.dumps(output, indent=2))
+    output_dict = _eval_result_to_dict(result)
+    print(json.dumps(output_dict, indent=2))
     if args.output:
         with open(args.output, "w") as f:
-            json.dump(output, f, indent=2)
+            json.dump(output_dict, f, indent=2)
 
     return 0
 
