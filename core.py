@@ -45,7 +45,7 @@ class TaskResult(TypedDict):
     metrics: Metrics
     num_samples: int
     elapsed: float
-    samples: list[LoggedSample] | None
+    samples: list[LoggedSample]
 
 
 @dataclass
@@ -219,23 +219,9 @@ def _prompt_to_str(prompt: str | tuple[str, list]) -> str:
 
 
 async def run_task(
-    task: Task,
-    config: APIConfig,
-    max_samples: int | None = None,
-    log_samples: bool = False,
+    task: Task, config: APIConfig, max_samples: int | None = None
 ) -> TaskResult:
-    """
-    Evaluate a task: collect samples, run inference, compute scores.
-
-    Args:
-        task: Task definition with samples loader and scoring function
-        config: API configuration (includes gen_kwargs for temperature, max_tokens, etc.)
-        max_samples: Optional limit on number of samples
-        log_samples: If True, include per-sample data in result
-
-    Returns:
-        TaskResult with metrics, sample count, elapsed time, and optional samples
-    """
+    """Evaluate a task: collect samples, run inference, compute scores."""
     samples = task.samples(max_samples)
     prompts = [s.prompt for s in samples]
 
@@ -249,9 +235,12 @@ async def run_task(
 
     logger.info("%s: accuracy=%.4f (%.2fs)", task.name, accuracy, elapsed)
 
-    logged: list[LoggedSample] | None = None
-    if log_samples:
-        logged = [
+    return {
+        "task": task.name,
+        "metrics": {"exact_match": accuracy},
+        "num_samples": len(samples),
+        "elapsed": round(elapsed, 2),
+        "samples": [
             {
                 "doc_id": i,
                 "target": s.target,
@@ -260,12 +249,5 @@ async def run_task(
                 "exact_match": score,
             }
             for i, (s, r, score) in enumerate(zip(samples, responses, scores))
-        ]
-
-    return {
-        "task": task.name,
-        "metrics": {"exact_match": accuracy},
-        "num_samples": len(samples),
-        "elapsed": round(elapsed, 2),
-        "samples": logged,
+        ],
     }

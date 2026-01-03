@@ -147,8 +147,8 @@ class TestE2E:
 
         assert captured_payload["model"] == "test-model"
 
-    def test_log_samples_writes_jsonl(self, tmp_path):
-        """--log_samples writes per-sample JSONL files."""
+    def test_output_path_writes_jsonl(self, tmp_path):
+        """--output_path writes per-sample JSONL files."""
 
         async def mock_post(url, **kwargs):
             return MockResp("The final answer is 4")
@@ -167,7 +167,6 @@ class TestE2E:
                 "model=test-model,base_url=http://test.com/v1",
                 "--max_samples",
                 "1",
-                "--log_samples",
                 "--output_path",
                 str(tmp_path),
             ],
