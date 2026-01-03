@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 
 import datasets
+from datasets import IterableDataset
 
 from core import Sample, Task
 
@@ -71,8 +72,9 @@ def samples(max_samples: int | None = None) -> list[Sample]:
         if remaining is not None and remaining <= 0:
             break
         ds = datasets.load_dataset("HuggingFaceM4/ChartQA", split=split, streaming=True)
-        docs = ds.take(remaining) if remaining is not None else ds
-        for doc in docs:
+        assert isinstance(ds, IterableDataset)
+        iterable = ds.take(remaining) if remaining is not None else ds
+        for doc in iterable:
             label = doc["label"]
             target = label[0] if isinstance(label, list) else str(label)
             result.append(
@@ -81,7 +83,7 @@ def samples(max_samples: int | None = None) -> list[Sample]:
                     target=target,
                 )
             )
-        if remaining is not None:
+        if max_samples is not None:
             remaining = max_samples - len(result)
     return result
 
