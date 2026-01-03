@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -39,6 +40,7 @@ class ConfigInfo(TypedDict):
 
 class EvalResult(TypedDict):
     results: dict[str, TaskResult]
+    dataset_hash: str
     total_seconds: float
     config: ConfigInfo
 
@@ -90,12 +92,14 @@ async def evaluate(
         output_path.mkdir(parents=True, exist_ok=True)
 
     results: dict[str, TaskResult] = {}
+    task_hashes: list[str] = []
     total_seconds = 0.0
 
     for name in task_names:
         if name not in TASKS:
             raise ValueError(f"Unknown task: {name}. Available: {list(TASKS.keys())}")
         result = await run_task(TASKS[name], config, max_samples)
+        task_hashes.append(result["task_hash"])
         if output_path and log_samples:
             _write_samples_jsonl(output_path, name, result["samples"])
         results[name] = {
@@ -106,6 +110,9 @@ async def evaluate(
 
     eval_result: EvalResult = {
         "results": results,
+        "dataset_hash": hashlib.sha256(
+            "".join(sorted(task_hashes)).encode()
+        ).hexdigest(),
         "total_seconds": round(total_seconds, 2),
         "config": {"model": config.model, "max_samples": max_samples},
     }
