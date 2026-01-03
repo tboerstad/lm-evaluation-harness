@@ -41,7 +41,7 @@ class ConfigInfo:
 
 @dataclass(frozen=True)
 class EvalResult:
-    results: tuple[TaskResult, ...]
+    results: list[TaskResult]
     dataset_hash: str
     total_seconds: float
     config: ConfigInfo
@@ -65,7 +65,7 @@ def _parse_kwargs(s: str) -> dict[str, str | int | float]:
     return result
 
 
-def _write_samples_jsonl(path: Path, task_name: str, samples: tuple) -> None:
+def _write_samples_jsonl(path: Path, task_name: str, samples: list) -> None:
     """Write per-sample results to JSONL file."""
     filepath = path / f"samples_{task_name}.jsonl"
     with open(filepath, "w") as f:
@@ -118,7 +118,7 @@ async def evaluate(
         total_seconds += result.elapsed
 
     eval_result = EvalResult(
-        results=tuple(results),
+        results=results,
         dataset_hash=hashlib.sha256("".join(sorted(task_hashes)).encode()).hexdigest(),
         total_seconds=round(total_seconds, 2),
         config=ConfigInfo(model=config.model, max_samples=max_samples),

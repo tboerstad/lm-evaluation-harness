@@ -50,7 +50,7 @@ class TaskResult:
     metrics: Metrics
     num_samples: int
     elapsed: float
-    samples: tuple[LoggedSample, ...]
+    samples: list[LoggedSample]
 
 
 @dataclass
@@ -270,7 +270,7 @@ async def run_task(
         metrics=Metrics(exact_match=accuracy),
         num_samples=len(samples),
         elapsed=round(elapsed, 2),
-        samples=tuple(
+        samples=[
             LoggedSample(
                 doc_id=i,
                 target=s.target,
@@ -279,5 +279,5 @@ async def run_task(
                 exact_match=score,
             )
             for i, (s, r, score) in enumerate(zip(samples, responses, scores))
-        ),
+        ],
     )
